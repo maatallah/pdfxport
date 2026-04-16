@@ -1,0 +1,27 @@
+FILE: in\60AZ.00333.pdf
+==========================================
+
+========= RAW TEXT =========
+Sur-mesure: TentureCommande:60AZ.00333.001Nom:CORTINA (KLT-07196)Rue:HULSTERWEG 94Code postal:3980Domicilié à:TESSENDERLORéférence:SanenPièce:woonkamerDétails tissu:Tenture, Verdeco FabricsRiga1800TissuGrand hauteurRideaux, Avec vague, 77 mmNombre1 x PaireRuban77 mmCorde à plombDans ourlet en basPlacq. de plombOuiOurlet basOurlet classique : 10 cm - 3 cmTransportStandaardStelStukPaireGlisseurs8 cmPlis vagues12Lés G/D1Hauteur de coupe444Plooifactor bruto2/1Agrafe56Nombre de lés2Bon côtéGrande hauteurOuiHauteur:246 cmLargeur:430 cmÀ gauche444À droite44460AZ.00333.001*60AZ.00333.001*
+
+
+----------------------------------
+BLOCK #1
+CONTENT:
+Commande:60AZ.00333.001Nom:CORTINA (KLT-07196)Rue:HULSTERWEG 94Code postal:3980Domicilié à:TESSENDERLORéférence:SanenPièce:woonkamerDétails tissu:Tenture, Verdeco FabricsRiga1800TissuGrand hauteurRideaux, Avec vague, 77 mmNombre1 x PaireRuban77 mmCorde à plombDans ourlet en basPlacq. de plombOuiOurlet basOurlet classique : 10 cm - 3 cmTransportStandaardStelStukPaireGlisseurs8 cmPlis vagues12Lés G/D1Hauteur de coupe444Plooifactor bruto2/1Agrafe56Nombre de lés2Bon côtéGrande hauteurOuiHauteur:246 cmLargeur:430 cmÀ gauche444À droite44460AZ.00333.001*60AZ.00333.001*
+EXTRACTPIECE INPUT: 
+Commande:60AZ.00333.001
+Nom:CORTINA (KLT-07196)
+Rue:HULSTERWEG 94
+Code postal:3980
+Domicilié à:TESSENDERLO
+Référence:Sanen
+Pièce:woonkamer
+Détails tissu:Tenture, Verdeco FabricsRiga1800TissuGrand hau
+
+--- SPLIT DEBUG ---
+Preview: Commande:60AZ.00333.001Nom:CORTINA (KLT-07196)Rue:HULSTERWEG 94Code postal:3980Domicilié à:TESSENDERLORéférence:SanenPièce:woonkamerDétails tissu:Tenture, Verdeco FabricsRiga1800TissuGrand hauteurRide
+Hauteur=246
+LeftZero=false RightZero=false
+Gauge= Droite=44460
+➡ RESULT: {OrderNumber:60AZ.00333 OrderItem:1/0/1 ClientCode:07196 ClientName:CORTINA Reference:Sanen Piece:woonkamer Size:430 x 246}
