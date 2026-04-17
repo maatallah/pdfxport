@@ -54,6 +54,9 @@ func main() {
 
 	flag.Parse()
 	DEBUG = *debug
+	if DEBUG {
+		pdf.DebugOn = true
+	}
 
 	if !*jsonFlag && !*csvFlag && !*excelFlag {
 		*excelFlag = true
@@ -179,8 +182,12 @@ func processPDF(path string) []Record {
 	}
 
 	blocks := splitBlocks(text)
+	if len(blocks) == 0 {
+		logDebug("⚠️ WARNING: No blocks generated. Raw text length: %d", len(text))
+	}
 
 	var out []Record
+	var lastCmd, lastCode, lastNom string
 
 	for i, b := range blocks {
 
@@ -193,13 +200,51 @@ func processPDF(path string) []Record {
 			continue
 		}
 
-		recs := parseBlock(b, len(blocks))
-
-		for _, r := range recs {
-			logDebug("➡ RESULT: %+v", r)
+		// Carry over page-level headers to subsequent blocks
+		if m := regexp.MustCompile(`(?i)(Commande:\s*\S+)`).FindString(b); m != "" {
+			lastCmd = m
+		}
+		if m := regexp.MustCompile(`KLT-[\s\r\n]*\d+`).FindString(b); m != "" {
+			lastCode = m
+		}
+		if m := regexp.MustCompile(`(?si)(Nom:\s*.*?\s*\(KLT-.*?\))`).FindString(b); m != "" {
+			lastNom = m
 		}
 
+		missingHeaders := ""
+		if !regexp.MustCompile(`(?i)Commande:`).MatchString(b) && lastCmd != "" {
+			missingHeaders += lastCmd + "\n"
+		}
+		if !regexp.MustCompile(`KLT-`).MatchString(b) && lastCode != "" {
+			missingHeaders += lastCode + "\n"
+		}
+		if !regexp.MustCompile(`(?i)Nom:`).MatchString(b) && lastNom != "" {
+			missingHeaders += lastNom + "\n"
+		}
+		if missingHeaders != "" {
+			b = missingHeaders + b
+		}
+
+		recs := parseBlock(b)
+
 		out = append(out, recs...)
+	}
+
+	// Post-pass to find the maximum item X per OrderNumber (which becomes Z)
+	maxZPerOrder := make(map[string]int)
+	for _, r := range out {
+		parts := strings.Split(r.OrderItem, "/")
+		if len(parts) >= 1 {
+			if x, err := strconv.Atoi(parts[0]); err == nil && x > maxZPerOrder[r.OrderNumber] {
+				maxZPerOrder[r.OrderNumber] = x
+			}
+		}
+	}
+
+	for i := range out {
+		z := maxZPerOrder[out[i].OrderNumber]
+		out[i].OrderItem = fmt.Sprintf("%s/%d", out[i].OrderItem, z)
+		logDebug("➡ RESULT: %+v", out[i])
 	}
 
 	return out
@@ -216,7 +261,10 @@ func extractText(path string) string {
 	var sb strings.Builder
 	for i := 1; i <= r.NumPage(); i++ {
 		p := r.Page(i)
-		txt, _ := p.GetPlainText(nil)
+		txt, err := p.GetPlainText(nil)
+		if err != nil {
+			logDebug("⚠️ ERROR parsing page %d: %v", i, err)
+		}
 		sb.WriteString(txt + "\n")
 	}
 	return sb.String()
@@ -224,38 +272,63 @@ func extractText(path string) string {
 
 // -----------------------------
 func splitBlocks(text string) []string {
-	// Capture each "Sur-mesure" section (either Tenture or Doublure) separately.
-	// This prevents a Tenture section from being skipped when a Doublure section
-	// appears later in the same raw text fragment.
-	// Find positions of each "Sur-mesure: (Tenture|Doublure)" and extract
-	// the text between consecutive occurrences as individual sections.
+	// Normalize text to make regex matching more robust before splitting
+	text = strings.ReplaceAll(text, "\u00A0", " ")
+	text = strings.ReplaceAll(text, "\r", "")
+
 	re := regexp.MustCompile(`(?i)Sur-mesure:\s*(Tenture|Doublure)`)
 
 	var blocks []string
 	matches := re.FindAllStringSubmatchIndex(text, -1)
-	if len(matches) == 0 {
+
+	if len(matches) > 0 {
+		for i, m := range matches {
+			kind := strings.ToLower(strings.TrimSpace(text[m[2]:m[3]]))
+
+			start := 0
+			if i > 0 {
+				start = matches[i][0]
+			}
+			nextStart := len(text)
+			if i+1 < len(matches) {
+				nextStart = matches[i+1][0]
+			}
+			body := strings.TrimSpace(text[start:nextStart])
+			if kind != "doublure" {
+				blocks = append(blocks, body)
+			}
+		}
 		return blocks
 	}
 
-	for i, m := range matches {
-		// m: [fullStart fullEnd group1Start group1End]
-		kind := strings.ToLower(strings.TrimSpace(text[m[2]:m[3]]))
-		bodyStart := m[1]
-		nextStart := len(text)
-		if i+1 < len(matches) {
-			nextStart = matches[i+1][0]
+	// Fallback 1: Split by Commande if no Sur-mesure label exists
+	reCmd := regexp.MustCompile(`(?i)Commande:`)
+	cmdMatches := reCmd.FindAllStringSubmatchIndex(text, -1)
+	if len(cmdMatches) > 0 {
+		for i, m := range cmdMatches {
+			start := m[0]
+			nextStart := len(text)
+			if i+1 < len(cmdMatches) {
+				nextStart = cmdMatches[i+1][0]
+			}
+			body := strings.TrimSpace(text[start:nextStart])
+			if !strings.Contains(strings.ToLower(body), "doublure") {
+				blocks = append(blocks, body)
+			}
 		}
-		body := strings.TrimSpace(text[bodyStart:nextStart])
-		// Include all kinds except explicit 'doublure'
-		if kind != "doublure" && strings.Contains(body, "Commande:") {
-			blocks = append(blocks, body)
-		}
+		return blocks
 	}
+
+	// Fallback 2: Entire text
+	if strings.TrimSpace(text) != "" && !strings.Contains(strings.ToLower(text), "doublure") {
+		blocks = append(blocks, text)
+	}
+
 	return blocks
 }
 
 // -----------------------------
-func extractOrderFields(fullCmd string, totalBlocks int) (string, string) {
+func extractOrderFields(fullCmd string) (string, int, int) {
 	parts := strings.Split(fullCmd, ".")
 
 	orderNumber := parts[0]
@@ -271,7 +344,7 @@ func extractOrderFields(fullCmd string, totalBlocks int) (string, string) {
 		y, _ = strconv.Atoi(parts[3])
 	}
 
-	return orderNumber, fmt.Sprintf("%d/%d/%d", x, y, totalBlocks)
+	return orderNumber, x, y
 }
 
 // -----------------------------
@@ -336,7 +409,7 @@ func extractPiece(block string) string {
 }
 
 // -----------------------------
-func parseBlock(block string, totalBlocks int) []Record {
+func parseBlock(block string) []Record {
 	// normalize block to make regex matching more robust (NBSPs, CRs, etc.)
 	norm := strings.ReplaceAll(block, "\u00A0", " ")
 	norm = strings.ReplaceAll(norm, "\r", "")
@@ -347,9 +420,10 @@ func parseBlock(block string, totalBlocks int) []Record {
 
 	rec := Record{}
 
+	var itemX, itemY int
 	reCmd := regexp.MustCompile(`Commande:\s*(\S+)`)
 	if m := reCmd.FindStringSubmatch(norm); m != nil {
-		rec.OrderNumber, rec.OrderItem = extractOrderFields(m[1], totalBlocks)
+		rec.OrderNumber, itemX, itemY = extractOrderFields(m[1])
 	}
 
 	reCode := regexp.MustCompile(`KLT-[\s\r\n]*(\d+)`)
@@ -362,16 +436,13 @@ func parseBlock(block string, totalBlocks int) []Record {
 		rec.ClientName = strings.Join(strings.Fields(m[1]), " ")
 	}
 
-	reRef := regexp.MustCompile(`(?i)Référence:\s*(.*?)(?:Pi[eéè]ce:|Détails|Details|Nom:|Rue:|Commande:|$)`)
+	// The previous multi-line regex for Reference was too greedy and would
+	// capture text between the reference and the next known label.
+	// This simpler, single-line regex is more robust and avoids capturing
+	// unrelated text from subsequent lines.
+	reRef := regexp.MustCompile(`(?i)Référence:\s*([^\n\r]*)`)
 	if m := reRef.FindStringSubmatch(norm); m != nil {
 		rec.Reference = strings.TrimSpace(m[1])
-	}
-	if rec.Reference == "" {
-		// Fallback to simpler pattern if non-greedy capture failed
-		reRef2 := regexp.MustCompile(`Référence:\s*([^\n\r]+)`)
-		if m := reRef2.FindStringSubmatch(norm); m != nil {
-			rec.Reference = strings.TrimSpace(m[1])
-		}
 	}
 
 	rec.Piece = extractPiece(norm)
@@ -420,14 +491,14 @@ func parseBlock(block string, totalBlocks int) []Record {
 
 		if gStr != "" {
 			r1 := rec
-			r1.OrderItem = fmt.Sprintf("1/1/%d", totalBlocks)
+			r1.OrderItem = fmt.Sprintf("%d/1", itemX)
 			r1.Size = gStr + " x " + hStr
 			results = append(results, r1)
 		}
 
 		if dStr != "" {
 			r2 := rec
-			r2.OrderItem = fmt.Sprintf("1/2/%d", totalBlocks)
+			r2.OrderItem = fmt.Sprintf("%d/2", itemX)
 			r2.Size = dStr + " x " + hStr
 			results = append(results, r2)
 		}
@@ -437,6 +508,7 @@ func parseBlock(block string, totalBlocks int) []Record {
 		return results
 	}
 
+	rec.OrderItem = fmt.Sprintf("%d/%d", itemX, itemY)
 	rec.Size = extractSize(norm)
 	return []Record{rec}
 }
@@ -497,7 +569,7 @@ func exportExcel(r []Record, f string) {
 		values := []string{rec.OrderNumber, rec.OrderItem, rec.ClientCode, rec.ClientName, rec.Reference, rec.Piece, rec.Size}
 		for j, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(j+1, i+2)
-			ex.SetCellValue(s, cell, v)
+			ex.SetCellStr(s, cell, v)
 		}
 	}
 
