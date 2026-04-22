@@ -1,0 +1,1365 @@
+FILE: M:\dev\cpt\PDFXport\in\0000.04033.pdf
+==========================================
+
+========= RAW TEXT =========
+Sur-mesure: Tenture
+Commande:0000.04033.001.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.8
+Plooiafstand bruto10.4
+/0
+Nombre de plis9
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:152 cm
+Largeur:82 cm
+À gauche
+162
+À droite
+0
+0000.04033.001.001
+*0000.04033.001.001*
+Sur-mesure: Tenture
+Commande:0000.04033.001.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.8
+Plooiafstand bruto10.4
+/0
+Nombre de plis9
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:152 cm
+Largeur:82 cm
+À gauche
+162
+À droite
+0
+0000.04033.001.002
+*0000.04033.001.002*
+Sur-mesure: Tenture
+Commande:0000.04033.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.78
+Plis dist.10
+Lés G/D1
+Hauteur de coupe153
+Plooifactor bruto1.78
+Plooiafstand bruto11.1
+/0
+Nombre de plis8
+Profondeur du pli3.8
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:148 cm
+Largeur:78 cm
+À gauche
+153
+À droite
+0
+0000.04033.002
+*0000.04033.002*
+Sur-mesure: Tenture
+Commande:0000.04033.003.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.85
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.85
+Plooiafstand bruto10.1
+/0
+Nombre de plis9
+Profondeur du pli3.7
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:220 cm
+Largeur:80 cm
+À gauche
+162
+À droite
+0
+0000.04033.003.001
+*0000.04033.003.001*
+Sur-mesure: Tenture
+Commande:0000.04033.003.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.85
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.85
+Plooiafstand bruto10.1
+/0
+Nombre de plis9
+Profondeur du pli3.7
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:220 cm
+Largeur:80 cm
+À gauche
+162
+À droite
+0
+0000.04033.003.002
+*0000.04033.003.002*
+Sur-mesure: Tenture
+Commande:0000.04033.004.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe201
+Plooifactor bruto1.8
+Plooiafstand bruto10.5
+/0
+Nombre de plis11
+Profondeur du pli3.8
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:200 cm
+Largeur:105 cm
+À gauche
+201
+À droite
+0
+0000.04033.004.001
+*0000.04033.004.001*
+Sur-mesure: Tenture
+Commande:0000.04033.004.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe201
+Plooifactor bruto1.8
+Plooiafstand bruto10.5
+/0
+Nombre de plis11
+Profondeur du pli3.8
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:200 cm
+Largeur:105 cm
+À gauche
+201
+À droite
+0
+0000.04033.004.002
+*0000.04033.004.002*
+Sur-mesure: Tenture
+Commande:0000.04033.005
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe210
+Plooifactor bruto1.8
+Plooiafstand bruto10.1
+/0
+Nombre de plis12
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:200 cm
+Largeur:110 cm
+À gauche
+210
+À droite
+0
+0000.04033.005
+*0000.04033.005*
+Sur-mesure: Tenture
+Commande:0000.04033.006.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe210
+Plooifactor bruto1.8
+Plooiafstand bruto10.1
+/0
+Nombre de plis12
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:265 cm
+Largeur:110 cm
+À gauche
+210
+À droite
+0
+0000.04033.006.001
+*0000.04033.006.001*
+Sur-mesure: Tenture
+Commande:0000.04033.006.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe210
+Plooifactor bruto1.8
+Plooiafstand bruto10.1
+/0
+Nombre de plis12
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:265 cm
+Largeur:110 cm
+À gauche
+210
+À droite
+0
+0000.04033.006.002
+*0000.04033.006.002*
+
+
+----------------------------------
+BLOCK #1
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.001.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.8
+Plooiafstand bruto10.4
+/0
+Nombre de plis9
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:152 cm
+Largeur:82 cm
+À gauche
+162
+À droite
+0
+0000.04033.001.001
+*0000.04033.001.001*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.001.001
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.001.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=152
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #2
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.001.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.8
+Plooiafstand bruto10.4
+/0
+Nombre de plis9
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:152 cm
+Largeur:82 cm
+À gauche
+162
+À droite
+0
+0000.04033.001.002
+*0000.04033.001.002*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.001.002
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.001.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=152
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #3
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.78
+Plis dist.10
+Lés G/D1
+Hauteur de coupe153
+Plooifactor bruto1.78
+Plooiafstand bruto11.1
+/0
+Nombre de plis8
+Profondeur du pli3.8
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:148 cm
+Largeur:78 cm
+À gauche
+153
+À droite
+0
+0000.04033.002
+*0000.04033.002*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.002
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+Tentu
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVE
+Hauteur=148
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #4
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.003.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.85
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.85
+Plooiafstand bruto10.1
+/0
+Nombre de plis9
+Profondeur du pli3.7
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:220 cm
+Largeur:80 cm
+À gauche
+162
+À droite
+0
+0000.04033.003.001
+*0000.04033.003.001*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.003.001
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.003.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=220
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #5
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.003.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, DIVERSE
+Savvy
+06 - SWAN
+Transparante
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.85
+Plis dist.10
+Lés G/D1
+Hauteur de coupe162
+Plooifactor bruto1.85
+Plooiafstand bruto10.1
+/0
+Nombre de plis9
+Profondeur du pli3.7
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:220 cm
+Largeur:80 cm
+À gauche
+162
+À droite
+0
+0000.04033.003.002
+*0000.04033.003.002*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.003.002
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.003.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=220
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #6
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.004.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe201
+Plooifactor bruto1.8
+Plooiafstand bruto10.5
+/0
+Nombre de plis11
+Profondeur du pli3.8
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:200 cm
+Largeur:105 cm
+À gauche
+201
+À droite
+0
+0000.04033.004.001
+*0000.04033.004.001*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.004.001
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.004.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=200
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #7
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.004.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe201
+Plooifactor bruto1.8
+Plooiafstand bruto10.5
+/0
+Nombre de plis11
+Profondeur du pli3.8
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:200 cm
+Largeur:105 cm
+À gauche
+201
+À droite
+0
+0000.04033.004.002
+*0000.04033.004.002*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.004.002
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.004.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=200
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #8
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.005
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe210
+Plooifactor bruto1.8
+Plooiafstand bruto10.1
+/0
+Nombre de plis12
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:200 cm
+Largeur:110 cm
+À gauche
+210
+À droite
+0
+0000.04033.005
+*0000.04033.005*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.005
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+Tentu
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.005
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verd
+Hauteur=200
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #9
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.006.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe210
+Plooifactor bruto1.8
+Plooiafstand bruto10.1
+/0
+Nombre de plis12
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:265 cm
+Largeur:110 cm
+À gauche
+210
+À droite
+0
+0000.04033.006.001
+*0000.04033.006.001*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.006.001
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.006.001
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=265
+LeftZero=false RightZero=true
+Gauge= Droite=0
+
+----------------------------------
+BLOCK #10
+CONTENT:
+Sur-mesure: Tenture
+Commande:0000.04033.006.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, Verdeco Fabrics
+Hamburg
+naturel 08
+Inbetween
+Grand hauteur
+Rideaux, Buckram/pli cousu, 10 cm, Pli simple
+Nombre1 x Lé gauche
+Ruban10 cm
+Tëte1.0
+Corde à plombpas
+Placq. de plombNon
+Ourlet basOurlet classique : 10 cm - 3 cm
+TransportStandaard
+StelStukLé gauche
+BandtypeSimple
+Détailsprofondeur pli 3.5cm
+Type de pliPli simple
+Pli de retourNon
+Ampleur1.8
+Plis dist.10
+Lés G/D1
+Hauteur de coupe210
+Plooifactor bruto1.8
+Plooiafstand bruto10.1
+/0
+Nombre de plis12
+Profondeur du pli3.6
+Nombre de lés1
+Bon côté
+Grande hauteurOui
+Bijzonderheden
+profondeur pli 3.5cm
+Hauteur:265 cm
+Largeur:110 cm
+À gauche
+210
+À droite
+0
+0000.04033.006.002
+*0000.04033.006.002*
+EXTRACTPIECE INPUT: Sur-mesure: Tenture
+
+Commande:0000.04033.006.002
+
+Nom:Gero wonen (KLT-11737)
+
+Rue:Aarschotsebaan 151 151
+
+Code postal:2500
+
+Domicilié à:Lier
+
+Référence:order 2405693
+
+Pièce:order 3.1
+
+Détails tissu:
+T
+
+--- SPLIT DEBUG ---
+Preview: Sur-mesure: Tenture
+Commande:0000.04033.006.002
+Nom:Gero wonen (KLT-11737)
+Rue:Aarschotsebaan 151 151
+Code postal:2500
+Domicilié à:Lier
+Référence:order 2405693
+Pièce:order 3.1
+Détails tissu:
+Tenture, 
+Hauteur=265
+LeftZero=false RightZero=true
+Gauge= Droite=0
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:1/1/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:82 x 152}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:1/2/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:82 x 152}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:2/0/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:78 x 148}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:3/1/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:80 x 220}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:3/2/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:80 x 220}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:4/1/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:105 x 200}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:4/2/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:105 x 200}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:5/0/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:110 x 200}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:6/1/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:110 x 265}
+➡ RESULT: {OrderNumber:0000.04033 OrderItem:6/2/6 ClientCode:11737 ClientName:Gero wonen Reference:order 2405693 Piece:order 3.1 Size:110 x 265}

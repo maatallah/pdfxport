@@ -15,7 +15,7 @@ echo.
 echo Traitement en cours...
 echo.
 
-ptxrid.exe -dir "%INDIR%" -outdir "%OUTDIR%" -excel
+go run main.go -debug -dir "%INDIR%" -outdir "%OUTDIR%" -excel
 
 echo.
 echo =======================================

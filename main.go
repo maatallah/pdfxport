@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
@@ -8,10 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
+	"time"
 
 	pdf "github.com/ledongthuc/pdf"
 	"github.com/xuri/excelize/v2"
@@ -68,44 +68,26 @@ func main() {
 		return
 	}
 
-	jobs := make(chan string, len(files))
-	results := make(chan struct {
-		file string
-		recs []Record
-	}, len(files))
-
-	var wg sync.WaitGroup
-
-	for w := 0; w < runtime.NumCPU(); w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for f := range jobs {
-				recs := processPDF(f)
-				results <- struct {
-					file string
-					recs []Record
-				}{f, recs}
-			}
-		}()
-	}
-
-	for _, f := range files {
-		jobs <- f
-	}
-	close(jobs)
-
-	wg.Wait()
-	close(results)
-
 	var allRecs []Record
 	var anyFile string
-	for res := range results {
+
+	for _, f := range files {
 		if anyFile == "" {
-			anyFile = res.file
+			anyFile = f
 		}
-		allRecs = append(allRecs, res.recs...)
+		recs := processPDF(f)
+		allRecs = append(allRecs, recs...)
 	}
+
+	fmt.Printf("\n=======================================\n")
+	fmt.Printf("          DATA EXTRACTION SUMMARY      \n")
+	fmt.Printf("=======================================\n")
+	fmt.Printf("Total Files Processed: %d\n", len(files))
+	fmt.Printf("Total Records Found:   %d\n", len(allRecs))
+	for i, r := range allRecs {
+		fmt.Printf(" [%d] Order: %s | Item: %s | Client: %s | Size: %s\n", i+1, r.OrderNumber, r.OrderItem, r.ClientName, r.Size)
+	}
+	fmt.Printf("=======================================\n")
 
 	// Ensure output directory exists
 	outPath := getOutputPath(*outdir, anyFile)
@@ -115,7 +97,10 @@ func main() {
 	os.MkdirAll(outPath, 0755)
 
 	if *excelFlag {
-		exportExcel(allRecs, filepath.Join(outPath, "output.xlsx"))
+		finalPath := filepath.Join(outPath, "output.xlsx")
+		absPath, _ := filepath.Abs(finalPath)
+		exportExcel(allRecs, finalPath)
+		fmt.Printf("\n💾 EXCEL FILE SAVED AT:\n➡ %s\n", absPath)
 	}
 	if *csvFlag {
 		exportCSV(allRecs, filepath.Join(outPath, "output.csv"))
@@ -143,6 +128,16 @@ func collectFiles(input, dir string, args []string) []string {
 
 	if dir != "" {
 		filepath.Walk(dir, func(p string, i os.FileInfo, e error) error {
+			if e != nil {
+				return nil
+			}
+			if i.IsDir() {
+				name := strings.ToLower(i.Name())
+				if name == "needs_ocr" || name == "out" {
+					return filepath.SkipDir // Never scan these folders
+				}
+				return nil
+			}
 			if strings.HasSuffix(strings.ToLower(p), ".pdf") {
 				files = append(files, p)
 			}
@@ -175,10 +170,25 @@ func processPDF(path string) []Record {
 		logDebug("==========================================")
 	}
 
-	text := extractText(path)
+	text, err := extractText(path)
+	if err != nil {
+		return nil // File couldn't be opened (likely locked). Skip moving.
+	}
 
 	if DEBUG {
 		logDebug("\n========= RAW TEXT =========\n%s", text)
+	}
+
+	base := filepath.Base(path)
+
+	// A valid text-based order will always contain the word "Commande".
+	// Scanned images (even with an embedded text barcode) will not.
+	hasCommande := regexp.MustCompile(`(?i)Commande`).MatchString(text)
+
+	if !hasCommande {
+		fmt.Printf(" ➡ Moving %s to needs_ocr (Image/Empty - Missing 'Commande')\n", base)
+		moveToOCR(path)
+		return nil
 	}
 
 	blocks := splitBlocks(text)
@@ -201,24 +211,24 @@ func processPDF(path string) []Record {
 		}
 
 		// Carry over page-level headers to subsequent blocks
-		if m := regexp.MustCompile(`(?i)(Commande:\s*\S+)`).FindString(b); m != "" {
+		if m := regexp.MustCompile(`(?i)(Commande\s*:\s*\S+)`).FindString(b); m != "" {
 			lastCmd = m
 		}
 		if m := regexp.MustCompile(`KLT-[\s\r\n]*\d+`).FindString(b); m != "" {
 			lastCode = m
 		}
-		if m := regexp.MustCompile(`(?si)(Nom:\s*.*?\s*\(KLT-.*?\))`).FindString(b); m != "" {
+		if m := regexp.MustCompile(`(?si)(Nom\s*:\s*.*?\s*\(KLT-.*?\))`).FindString(b); m != "" {
 			lastNom = m
 		}
 
 		missingHeaders := ""
-		if !regexp.MustCompile(`(?i)Commande:`).MatchString(b) && lastCmd != "" {
+		if !regexp.MustCompile(`(?i)Commande\s*:`).MatchString(b) && lastCmd != "" {
 			missingHeaders += lastCmd + "\n"
 		}
 		if !regexp.MustCompile(`KLT-`).MatchString(b) && lastCode != "" {
 			missingHeaders += lastCode + "\n"
 		}
-		if !regexp.MustCompile(`(?i)Nom:`).MatchString(b) && lastNom != "" {
+		if !regexp.MustCompile(`(?i)Nom\s*:`).MatchString(b) && lastNom != "" {
 			missingHeaders += lastNom + "\n"
 		}
 		if missingHeaders != "" {
@@ -227,7 +237,12 @@ func processPDF(path string) []Record {
 
 		recs := parseBlock(b)
 
-		out = append(out, recs...)
+		// Only keep records that successfully extracted an Order Number
+		for _, r := range recs {
+			if r.OrderNumber != "" {
+				out = append(out, r)
+			}
+		}
 	}
 
 	// Post-pass to find the maximum item X per OrderNumber (which becomes Z)
@@ -251,12 +266,61 @@ func processPDF(path string) []Record {
 }
 
 // -----------------------------
-func extractText(path string) string {
-	f, r, err := pdf.Open(path)
-	if err != nil {
-		return ""
+func moveToOCR(path string) {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	ocrDir := filepath.Join(dir, "needs_ocr")
+
+	// Create the needs_ocr directory if it doesn't exist
+	os.MkdirAll(ocrDir, 0755)
+
+	dest := filepath.Join(ocrDir, base)
+
+	if filepath.Base(dir) == "needs_ocr" {
+		return
 	}
-	defer f.Close()
+
+	// On Windows, os.Rename completely fails if the destination file already exists!
+	os.Remove(dest)
+
+	if err := os.Rename(path, dest); err == nil {
+		fmt.Printf("   ✅ Moved %s to needs_ocr\n", base)
+		return
+	}
+
+	// Fallback: Copy and Delete
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Printf("   ❌ Move failed (Read): %v\n", err)
+		return
+	}
+	if err := os.WriteFile(dest, data, 0644); err != nil {
+		fmt.Printf("   ❌ Move failed (Write): %v\n", err)
+		return
+	}
+
+	for i := 0; i < 5; i++ {
+		if err := os.Remove(path); err == nil {
+			fmt.Printf("   ✅ Copied & Deleted %s to needs_ocr\n", base)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	fmt.Printf("   ⚠️ Copied %s to needs_ocr, but original is locked and cannot be deleted.\n", base)
+}
+
+// -----------------------------
+func extractText(path string) (string, error) {
+	// Read entire file into RAM first. This guarantees the file handle on disk is closed instantly.
+	fileData, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
+	if err != nil {
+		return "", err
+	}
 
 	var sb strings.Builder
 	for i := 1; i <= r.NumPage(); i++ {
@@ -267,7 +331,7 @@ func extractText(path string) string {
 		}
 		sb.WriteString(txt + "\n")
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 // -----------------------------
@@ -276,7 +340,7 @@ func splitBlocks(text string) []string {
 	text = strings.ReplaceAll(text, "\u00A0", " ")
 	text = strings.ReplaceAll(text, "\r", "")
 
-	re := regexp.MustCompile(`(?i)Sur-mesure:\s*(Tenture|Doublure)`)
+	re := regexp.MustCompile(`(?i)Sur-mesure\s*:\s*(Tenture|Doublure)`)
 
 	var blocks []string
 	matches := re.FindAllStringSubmatchIndex(text, -1)
@@ -302,7 +366,7 @@ func splitBlocks(text string) []string {
 	}
 
 	// Fallback 1: Split by Commande if no Sur-mesure label exists
-	reCmd := regexp.MustCompile(`(?i)Commande:`)
+	reCmd := regexp.MustCompile(`(?i)Commande\s*:`)
 	cmdMatches := reCmd.FindAllStringSubmatchIndex(text, -1)
 	if len(cmdMatches) > 0 {
 		for i, m := range cmdMatches {
@@ -352,11 +416,11 @@ func extractPiece(block string) string {
 	logDebug("EXTRACTPIECE INPUT: %.200s", block)
 
 	// Try to find the 'Pièce:' label anywhere and extract until the next known label.
-	rePiece := regexp.MustCompile(`(?i)(?:Pi[eéè]ce:|Piece:)`)
+	rePiece := regexp.MustCompile(`(?i)(?:Pi[eéè]ce\s*:|Piece\s*:)`)
 	if loc := rePiece.FindStringIndex(block); loc != nil {
 		start := loc[1]
 		rest := block[start:]
-		reNext := regexp.MustCompile(`(?i)(Détails|Details|Nom:|Rue:|Référence:|Commande:|Pi[eéè]ce:|Piece:)`)
+		reNext := regexp.MustCompile(`(?i)(Détails|Details|Nom\s*:|Rue\s*:|Référence\s*:|Commande\s*:|Pi[eéè]ce\s*:|Piece\s*:)`)
 		if nloc := reNext.FindStringIndex(rest); nloc != nil {
 			val := strings.TrimSpace(rest[:nloc[0]])
 			val = strings.Join(strings.Fields(val), " ")
@@ -377,10 +441,15 @@ func extractPiece(block string) string {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+		lline := strings.ToLower(line)
 
-		if strings.HasPrefix(line, "Pièce:") {
+		if strings.HasPrefix(lline, "pièce") || strings.HasPrefix(lline, "piece") {
 
-			val := strings.TrimSpace(strings.TrimPrefix(line, "Pièce:"))
+			idx := strings.Index(line, ":")
+			if idx == -1 {
+				continue
+			}
+			val := strings.TrimSpace(line[idx+1:])
 
 			if val == "" {
 				return ""
@@ -415,23 +484,23 @@ func parseBlock(block string) []Record {
 	norm = strings.ReplaceAll(norm, "\r", "")
 	// Ensure common field labels appear on their own line when PDFs collapse
 	// spacing (e.g. "Référence:L0102...Pièce:Fenêtre G").
-	labelRe := regexp.MustCompile(`(?i)(Commande:|Nom:|Rue:|Code postal:|Domicilié à:|Référence:|Pi[eéè]ce:|Détails tissu:|Détails:|Hauteur:|Largeur:|À gauche|À droite|Gauge:|Droite:)`)
+	labelRe := regexp.MustCompile(`(?i)(Commande\s*:|Nom\s*:|Rue\s*:|Code postal\s*:|Domicilié à\s*:|Référence\s*:|Pi[eéè]ce\s*:|Détails tissu\s*:|Détails\s*:|Hauteur\s*:|Largeur\s*:|À gauche|À droite|Gauge\s*:|Droite\s*:)`)
 	norm = labelRe.ReplaceAllString(norm, "\n$1")
 
 	rec := Record{}
 
 	var itemX, itemY int
-	reCmd := regexp.MustCompile(`Commande:\s*(\S+)`)
+	reCmd := regexp.MustCompile(`(?i)Commande\s*:\s*(\S+)`)
 	if m := reCmd.FindStringSubmatch(norm); m != nil {
 		rec.OrderNumber, itemX, itemY = extractOrderFields(m[1])
 	}
 
-	reCode := regexp.MustCompile(`KLT-[\s\r\n]*(\d+)`)
+	reCode := regexp.MustCompile(`(?i)KLT-[\s\r\n]*(\d+)`)
 	if cm := reCode.FindStringSubmatch(norm); len(cm) > 1 {
 		rec.ClientCode = cm[1]
 	}
 
-	reNom := regexp.MustCompile(`(?si)Nom:\s*(.*?)\s*\(KLT-.*?\)`)
+	reNom := regexp.MustCompile(`(?si)Nom\s*:\s*(.*?)\s*\(KLT-.*?\)`)
 	if m := reNom.FindStringSubmatch(norm); m != nil {
 		rec.ClientName = strings.Join(strings.Fields(m[1]), " ")
 	}
@@ -440,7 +509,7 @@ func parseBlock(block string) []Record {
 	// capture text between the reference and the next known label.
 	// This simpler, single-line regex is more robust and avoids capturing
 	// unrelated text from subsequent lines.
-	reRef := regexp.MustCompile(`(?i)Référence:\s*([^\n\r]*)`)
+	reRef := regexp.MustCompile(`(?i)Référence\s*:\s*([^\n\r]*)`)
 	if m := reRef.FindStringSubmatch(norm); m != nil {
 		rec.Reference = strings.TrimSpace(m[1])
 	}
@@ -455,12 +524,12 @@ func parseBlock(block string) []Record {
 
 	// Require a colon or whitespace after 'Hauteur' to avoid matching other
 	// occurrences like 'grand hauteur... 10 cm' earlier in the block.
-	reH := regexp.MustCompile(`(?i)Hauteur[:\s]*([\d.,]+)`)
+	reH := regexp.MustCompile(`(?i)Hauteur\s*[:\s]*([\d.,]+)`)
 	reLeftZero := regexp.MustCompile(`(?is)(?:À|A|à|a)\s*gauche[^0-9]*0`)
 	reRightZero := regexp.MustCompile(`(?is)(?:À|A|à|a)\s*droite[^0-9]*0`)
 
-	reGauge := regexp.MustCompile(`(?i)Gauge[:\s]*([\d.,]+)`)
-	reDroite := regexp.MustCompile(`(?i)Droite[:\s]*([\d.,]+)`)
+	reGauge := regexp.MustCompile(`(?i)Gauge\s*[:\s]*([\d.,]+)`)
+	reDroite := regexp.MustCompile(`(?i)Droite\s*[:\s]*([\d.,]+)`)
 
 	hStr := ""
 	if m := reH.FindStringSubmatch(norm); m != nil {
@@ -516,8 +585,8 @@ func parseBlock(block string) []Record {
 // -----------------------------
 func extractSize(block string) string {
 
-	reH := regexp.MustCompile(`Hauteur:\s*([\d.,]+)`)
-	reW := regexp.MustCompile(`Largeur:\s*([\d.,]+)`)
+	reH := regexp.MustCompile(`(?i)Hauteur\s*:\s*([\d.,]+)`)
+	reW := regexp.MustCompile(`(?i)Largeur\s*:\s*([\d.,]+)`)
 
 	h := ""
 	w := ""
@@ -565,13 +634,31 @@ func exportExcel(r []Record, f string) {
 		ex.SetCellValue(s, cell, h)
 	}
 
+	colWidths := make([]int, len(headers))
+	for i, h := range headers {
+		colWidths[i] = len(h)
+	}
+
 	for i, rec := range r {
 		values := []string{rec.OrderNumber, rec.OrderItem, rec.ClientCode, rec.ClientName, rec.Reference, rec.Piece, rec.Size}
 		for j, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(j+1, i+2)
 			ex.SetCellStr(s, cell, v)
+			if len(v) > colWidths[j] {
+				colWidths[j] = len(v)
+			}
 		}
 	}
 
-	ex.SaveAs(f)
+	for i, w := range colWidths {
+		colName, _ := excelize.ColumnNumberToName(i + 1)
+		// Add a little padding to the calculated max width
+		ex.SetColWidth(s, colName, colName, float64(w)+2.0)
+	}
+
+	if err := ex.SaveAs(f); err != nil {
+		fmt.Printf("❌ ERROR saving Excel file (is it open?): %v\n", err)
+	} else {
+		fmt.Printf("✅ Successfully wrote %d rows to Excel!\n", len(r))
+	}
 }
