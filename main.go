@@ -29,6 +29,15 @@ type Record struct {
 }
 
 // -----------------------------
+type FileStat struct {
+	FileName  string
+	Processed int
+	Extracted int
+	Skipped   int
+	Moved     string
+}
+
+// -----------------------------
 var DEBUG bool
 var debugFile *os.File
 
@@ -64,30 +73,22 @@ func main() {
 
 	files := collectFiles(*input, *dir, flag.Args())
 	if len(files) == 0 {
-		fmt.Println("❌ No PDF files found")
+		fmt.Println("❌ Aucun fichier PDF trouvé")
 		return
 	}
 
 	var allRecs []Record
+	var allStats []FileStat
 	var anyFile string
 
 	for _, f := range files {
 		if anyFile == "" {
 			anyFile = f
 		}
-		recs := processPDF(f)
+		recs, stat := processPDF(f)
 		allRecs = append(allRecs, recs...)
+		allStats = append(allStats, stat)
 	}
-
-	fmt.Printf("\n=======================================\n")
-	fmt.Printf("          DATA EXTRACTION SUMMARY      \n")
-	fmt.Printf("=======================================\n")
-	fmt.Printf("Total Files Processed: %d\n", len(files))
-	fmt.Printf("Total Records Found:   %d\n", len(allRecs))
-	for i, r := range allRecs {
-		fmt.Printf(" [%d] Order: %s | Item: %s | Client: %s | Size: %s\n", i+1, r.OrderNumber, r.OrderItem, r.ClientName, r.Size)
-	}
-	fmt.Printf("=======================================\n")
 
 	// Ensure output directory exists
 	outPath := getOutputPath(*outdir, anyFile)
@@ -98,9 +99,7 @@ func main() {
 
 	if *excelFlag {
 		finalPath := filepath.Join(outPath, "output.xlsx")
-		absPath, _ := filepath.Abs(finalPath)
 		exportExcel(allRecs, finalPath)
-		fmt.Printf("\n💾 EXCEL FILE SAVED AT:\n➡ %s\n", absPath)
 	}
 	if *csvFlag {
 		exportCSV(allRecs, filepath.Join(outPath, "output.csv"))
@@ -109,7 +108,9 @@ func main() {
 		exportJSON(allRecs, filepath.Join(outPath, "output.json"))
 	}
 
-	fmt.Println("✅ Done")
+	writeLogFile(filepath.Join(outPath, "extraction_log.tsv"), allStats)
+
+	fmt.Println("✅ Terminé")
 }
 
 // -----------------------------
@@ -133,7 +134,7 @@ func collectFiles(input, dir string, args []string) []string {
 			}
 			if i.IsDir() {
 				name := strings.ToLower(i.Name())
-				if name == "needs_ocr" || name == "out" {
+				if name == "en_instance" || name == "out" {
 					return filepath.SkipDir // Never scan these folders
 				}
 				return nil
@@ -158,7 +159,10 @@ func getOutputPath(outdir, input string) string {
 // -----------------------------
 // PROCESS PDF + DEBUG FILE
 // -----------------------------
-func processPDF(path string) []Record {
+func processPDF(path string) ([]Record, FileStat) {
+
+	base := filepath.Base(path)
+	stat := FileStat{FileName: base, Moved: "N"}
 
 	if DEBUG {
 		logPath := strings.TrimSuffix(path, ".pdf") + "_debug.txt"
@@ -172,28 +176,29 @@ func processPDF(path string) []Record {
 
 	text, err := extractText(path)
 	if err != nil {
-		return nil // File couldn't be opened (likely locked). Skip moving.
+		return nil, stat // File couldn't be opened (likely locked). Skip moving.
 	}
 
 	if DEBUG {
 		logDebug("\n========= RAW TEXT =========\n%s", text)
 	}
 
-	base := filepath.Base(path)
-
 	// A valid text-based order will always contain the word "Commande".
 	// Scanned images (even with an embedded text barcode) will not.
 	hasCommande := regexp.MustCompile(`(?i)Commande`).MatchString(text)
 
 	if !hasCommande {
-		fmt.Printf(" ➡ Moving %s to needs_ocr (Image/Empty - Missing 'Commande')\n", base)
+		fmt.Printf(" ➡ Déplacement de %s vers en_instance (Image/Vide - 'Commande' manquant)\n", base)
 		moveToOCR(path)
-		return nil
+		stat.Moved = "Y"
+		return nil, stat
 	}
 
 	blocks := splitBlocks(text)
+	stat.Processed = len(blocks)
+
 	if len(blocks) == 0 {
-		logDebug("⚠️ WARNING: No blocks generated. Raw text length: %d", len(text))
+		logDebug("⚠️ AVERTISSEMENT : Aucun bloc généré. Longueur du texte brut : %d", len(text))
 	}
 
 	var out []Record
@@ -202,11 +207,12 @@ func processPDF(path string) []Record {
 	for i, b := range blocks {
 
 		logDebug("\n----------------------------------")
-		logDebug("BLOCK #%d", i+1)
-		logDebug("CONTENT:\n%s", b)
+		logDebug("BLOC #%d", i+1)
+		logDebug("CONTENU :\n%s", b)
 
 		if strings.Contains(strings.ToLower(b), "sur-mesure: doublure") {
-			logDebug("⛔ SKIPPED (Doublure)")
+			logDebug("⛔ IGNORÉ (Doublure)")
+			stat.Skipped++
 			continue
 		}
 
@@ -259,24 +265,25 @@ func processPDF(path string) []Record {
 	for i := range out {
 		z := maxZPerOrder[out[i].OrderNumber]
 		out[i].OrderItem = fmt.Sprintf("%s/%d", out[i].OrderItem, z)
-		logDebug("➡ RESULT: %+v", out[i])
+		logDebug("➡ RÉSULTAT : %+v", out[i])
 	}
 
-	return out
+	stat.Extracted = len(out)
+	return out, stat
 }
 
 // -----------------------------
 func moveToOCR(path string) {
 	dir := filepath.Dir(path)
 	base := filepath.Base(path)
-	ocrDir := filepath.Join(dir, "needs_ocr")
+	ocrDir := filepath.Join(dir, "en_instance")
 
-	// Create the needs_ocr directory if it doesn't exist
+	// Create the en_instance directory if it doesn't exist
 	os.MkdirAll(ocrDir, 0755)
 
 	dest := filepath.Join(ocrDir, base)
 
-	if filepath.Base(dir) == "needs_ocr" {
+	if filepath.Base(dir) == "en_instance" {
 		return
 	}
 
@@ -284,29 +291,29 @@ func moveToOCR(path string) {
 	os.Remove(dest)
 
 	if err := os.Rename(path, dest); err == nil {
-		fmt.Printf("   ✅ Moved %s to needs_ocr\n", base)
+		fmt.Printf("   ✅ %s déplacé vers en_instance\n", base)
 		return
 	}
 
 	// Fallback: Copy and Delete
 	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Printf("   ❌ Move failed (Read): %v\n", err)
+		fmt.Printf("   ❌ Échec du déplacement (Lecture) : %v\n", err)
 		return
 	}
 	if err := os.WriteFile(dest, data, 0644); err != nil {
-		fmt.Printf("   ❌ Move failed (Write): %v\n", err)
+		fmt.Printf("   ❌ Échec du déplacement (Écriture) : %v\n", err)
 		return
 	}
 
 	for i := 0; i < 5; i++ {
 		if err := os.Remove(path); err == nil {
-			fmt.Printf("   ✅ Copied & Deleted %s to needs_ocr\n", base)
+			fmt.Printf("   ✅ %s copié et supprimé vers en_instance\n", base)
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	fmt.Printf("   ⚠️ Copied %s to needs_ocr, but original is locked and cannot be deleted.\n", base)
+	fmt.Printf("   ⚠️ %s copié vers en_instance, mais l'original est verrouillé et ne peut pas être supprimé.\n", base)
 }
 
 // -----------------------------
@@ -327,7 +334,7 @@ func extractText(path string) (string, error) {
 		p := r.Page(i)
 		txt, err := p.GetPlainText(nil)
 		if err != nil {
-			logDebug("⚠️ ERROR parsing page %d: %v", i, err)
+			logDebug("⚠️ ERREUR lors de l'analyse de la page %d : %v", i, err)
 		}
 		sb.WriteString(txt + "\n")
 	}
@@ -340,7 +347,7 @@ func splitBlocks(text string) []string {
 	text = strings.ReplaceAll(text, "\u00A0", " ")
 	text = strings.ReplaceAll(text, "\r", "")
 
-	re := regexp.MustCompile(`(?i)Sur-mesure\s*:\s*(Tenture|Doublure)`)
+	re := regexp.MustCompile(`(?i)Sur-mesure\s*:\s*(Tenture|Doublure|Commande\s*Tissu)`)
 
 	var blocks []string
 	matches := re.FindAllStringSubmatchIndex(text, -1)
@@ -413,7 +420,7 @@ func extractOrderFields(fullCmd string) (string, int, int) {
 
 // -----------------------------
 func extractPiece(block string) string {
-	logDebug("EXTRACTPIECE INPUT: %.200s", block)
+	logDebug("ENTRÉE EXTRACTPIECE : %.200s", block)
 
 	// Try to find the 'Pièce:' label anywhere and extract until the next known label.
 	rePiece := regexp.MustCompile(`(?i)(?:Pi[eéè]ce\s*:|Piece\s*:)`)
@@ -519,8 +526,8 @@ func parseBlock(block string) []Record {
 	// -----------------------------
 	// SPLIT DEBUG
 	// -----------------------------
-	logDebug("\n--- SPLIT DEBUG ---")
-	logDebug("Preview: %.200s", block)
+	logDebug("\n--- DÉBOGAGE DE SÉPARATION ---")
+	logDebug("Aperçu : %.200s", block)
 
 	// Require a colon or whitespace after 'Hauteur' to avoid matching other
 	// occurrences like 'grand hauteur... 10 cm' earlier in the block.
@@ -572,7 +579,7 @@ func parseBlock(block string) []Record {
 			results = append(results, r2)
 		}
 
-		logDebug("SPLIT RESULT COUNT: %d", len(results))
+		logDebug("NOMBRE DE RÉSULTATS DE SÉPARATION : %d", len(results))
 
 		return results
 	}
@@ -600,6 +607,12 @@ func extractSize(block string) string {
 
 	if w != "" && h != "" {
 		return w + " x " + h
+	}
+
+	// Fallback for cases like 'Commande Tissu' where only 'Hauteur de coupe' exists
+	reHC := regexp.MustCompile(`(?i)Hauteur de coupe\s*[:]?\s*([\d.,]+)`)
+	if m := reHC.FindStringSubmatch(block); m != nil {
+		return strings.ReplaceAll(m[1], ",", ".")
 	}
 
 	return ""
@@ -657,8 +670,32 @@ func exportExcel(r []Record, f string) {
 	}
 
 	if err := ex.SaveAs(f); err != nil {
-		fmt.Printf("❌ ERROR saving Excel file (is it open?): %v\n", err)
+		fmt.Printf("❌ ERREUR lors de la sauvegarde du fichier Excel (est-il ouvert ?) : %v\n", err)
 	} else {
-		fmt.Printf("✅ Successfully wrote %d rows to Excel!\n", len(r))
+		fmt.Printf("✅ %d lignes écrites avec succès dans Excel !\n", len(r))
+	}
+}
+
+// -----------------------------
+func writeLogFile(logPath string, stats []FileStat) {
+	fileExists := false
+	if _, err := os.Stat(logPath); err == nil {
+		fileExists = true
+	}
+
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("❌ ERREUR lors de l'ouverture du fichier journal: %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	if !fileExists {
+		f.WriteString("Timestamp\tFile name\tProcessed items\tExtracted items\tSkipped items\tMoved Y/N\n")
+	}
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	for _, s := range stats {
+		f.WriteString(fmt.Sprintf("%s\t%s\t%d\t%d\t%d\t%s\n", timestamp, s.FileName, s.Processed, s.Extracted, s.Skipped, s.Moved))
 	}
 }

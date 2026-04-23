@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-color 0A
+color 0F
 title Analyseur PDF vers Excel
 
 echo =======================================
@@ -11,14 +11,18 @@ echo.
 set /p INDIR="1. Dossier d'entree : "
 set /p OUTDIR="2. Dossier de sortie : "
 
+color 0E
 echo.
 echo Traitement en cours...
 echo.
 
-go run main.go -debug -dir "%INDIR%" -outdir "%OUTDIR%" -excel
+color 0A
+ptxrid.exe -dir "%INDIR%" -outdir "%OUTDIR%" -excel
 
+
+color 0F
 echo.
 echo =======================================
-echo Logs generes a cote des PDF (_debug.txt)
+echo Exécution treminée
 echo =======================================
 pause
