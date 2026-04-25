@@ -1,0 +1,330 @@
+Commande: _ 6047.00023.001
+
+Nom: COMPAGNIE DES COTONNADES {KLT-02169}
+Rue: RUE FRANCOIS LIBERT 19
+
+Code postal: 1410
+
+Domidilé à: WATERLOO
+
+Référence:  brunet
+
+Plèce:
+
+Détails tissu:
+Tenture, Verdeco Fabrics
+Prag
+
+2930
+
+Inbetween
+
+Al de plomp
+
+ 
+
+ 
+
+ 
+
+Rideaux, Buckram/pli cousu, 10 cm, plis double
+
+ 
+
+ 
+
+ 
+
+ 
+
+Nombre 1x Paire Ploolfactor bruto 2
+
+Ruban 10 cm Ploolafstand bruto 10
+
+Tête 0.5 1 1
+
+Placq. de plomb Non Nombre de plis 34
+
+[Transport Standaard Profondeur du pli 2.6
+
+StelStuk Paire Nornbre de lés 2
+
+Bandtype Simple Bon côté
+
+Type de pli plis double Grande hauteur Oui
+
+Pl de retour Non Couper corde à plomb Non
+
+lAmpleur 2
+
+lis dist, 10
+
+Lés GD 1
+
+Hauteur de coupe 332
+
+Hauteur: 274 cm À guche À droite
+Largeur. 320 cm 332
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+6047.00023.001
+Commande: _ 6047.00023.002
+
+Nom: COMPAGNIE DES COTONNADES {KLT-02169}
+Rue: RUE FRANCOIS LIBERT 19
+
+Code postal: 1410
+
+Domidilé à: WATERLOO
+
+Référence:  brunet
+
+Plèce:
+
+Détails tissu:
+Tenture, Verdeco Fabrics
+Prag
+
+2930
+
+Inbetween
+
+Al de plomp
+
+ 
+
+ 
+
+ 
+
+Rideaux, Buckram/pli cousu, 10 cm, plis double
+
+ 
+
+ 
+
+ 
+
+ 
+
+Nombre 1x Paire Ploolfactor bruto 2
+
+Ruban 10 cm Ploolafstand bruto 103
+
+Tête 0.5 1 1
+
+Placq. de plomb Non Nombre de plis 32
+
+[Transport Standaard Profondeur du pli 27
+
+StelStuk Paire Nornbre de lés 2
+
+Bandtype Simple Bon côté
+
+Type de pli plis double Grande hauteur Qui
+
+Pl de retour Non Couper corde à plomb Non
+
+lAmpleur 2
+
+lis dist, 10
+
+Lés GD 1
+
+Hauteur de coupe 322
+
+Hauteur: 274 cm À guche À droite
+Largeur 310 cm 32
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+6047.00023.002
+Commande: _ 6047.00023.003
+
+Nom: COMPAGNIE DES COTONNADES {KLT-02169}
+Rue: RUE FRANCOIS LIBERT 19
+
+Code postal: 1410
+
+Domidilé à: WATERLOO
+
+Référence:  brunet
+
+Plèce:
+
+Détails tissu:
+
+Store bateau, Verdeco Fabrics
+Prag
+
+2930
+
+Inbetween
+
+Al de plomp
+
+ 
+
+ 
+
+ 
+
+Store bateau, Tunnels derrière, 6 mm Fibre de verre
+
+ 
+
+ 
+
+ 
+
+ 
+
+Nombre 1 Benodlgd 1x145
+
+Méchanisme Chaîne Détails
+
+Couleur profil blanc en plastic Hauteur segment 30
+
+Chiki-safety Oui Distance uniformément réparties
+Hauteur d'installation Connu En bas demi-segment
+
+Longueur de la chaîne 125 Relever Chaque segment
+Couleur de la chaîne Blanc
+
+Position de commande droite
+
+Segmentinfo
+
+31.8 cm/5 x 28 cm / 14.2 cm (hauteur du paquet + 23.8 cm)
+
+Hauteur: 186 cm Distances de coupe
+Largeur. 108 cm Hoogte:
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+6047.00023.003
+Commande: _ 6047.00023.004
+
+Nom: COMPAGNIE DES COTONNADES {KLT-02169}
+Rue: RUE FRANCOIS LIBERT 19
+
+Code postal: 1410
+
+Domidilé à: WATERLOO
+
+Référence:  brunet
+
+Plèce:
+
+Détails tissu:
+Tenture, Verdeco Fabrics
+Prag
+
+2930
+
+Inbetween
+
+Al de plomp
+
+ 
+
+ 
+
+ 
+
+Rideaux, Buckram/pli cousu, 10 cm, plis double
+
+ 
+
+ 
+
+ 
+
+ 
+
+Nombre 1x Lé droite Ploolfactor bruto 2
+
+Ruban 10 cm Ploolafstand bruto 10.1
+
+Tête 0.5 1 1
+
+Placq. de plomb Non Nombre de plis 16
+
+[Transport Standaard Profondeur du pli 25
+
+StelStuk Lé droite Nombre de lés 1
+
+Bandtype Simple Bon côté
+
+Type de pli plis double Grande hauteur Oui
+
+Pl de retour Non Couper corde à plomb Non
+
+lAmpleur 2
+
+lis dist, 10
+
+Lés GD 0
+
+Hauteur de coupe 312
+
+Hauteur: 217 cm Agauche | Àdroite
+Largeur 150 cm 0 312
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+6047.00023.004
+

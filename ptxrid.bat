@@ -1,4 +1,11 @@
 @echo off
+
+:: Désactiver le blocage de sécurité Windows 7 sur les lecteurs réseau
+set SEE_MASK_NOZONECHECKS=1
+
+:: Force le répertoire de travail au dossier actuel (corrige les bugs des lecteurs réseau)
+cd /d "%~dp0"
+
 chcp 65001 >nul
 color 0F
 title Analyseur PDF vers Excel
@@ -17,8 +24,8 @@ echo Traitement en cours...
 echo.
 
 color 0A
-ptxrid.exe -dir "%INDIR%" -outdir "%OUTDIR%" -excel
-
+echo [Script] Lancement de l'executable...
+"%~dp0ptxrid.exe" -dir "%INDIR%" -outdir "%OUTDIR%" -excel
 
 color 0F
 echo.

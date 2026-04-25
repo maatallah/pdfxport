@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -35,6 +37,7 @@ type FileStat struct {
 	Extracted int
 	Skipped   int
 	Moved     string
+	OCR       bool
 }
 
 // -----------------------------
@@ -51,6 +54,8 @@ func logDebug(format string, a ...interface{}) {
 // MAIN
 // -----------------------------
 func main() {
+
+	fmt.Println(">> Demarrage du programme Go...")
 
 	input := flag.String("input", "", "")
 	dir := flag.String("dir", "", "")
@@ -71,9 +76,21 @@ func main() {
 		*excelFlag = true
 	}
 
+	// Resolve mapped drive letters to UNC paths (fixes Windows 7 UAC elevation)
+	if *dir != "" {
+		*dir = resolveUNC(*dir)
+	}
+	if *outdir != "" {
+		*outdir = resolveUNC(*outdir)
+	}
+
+	fmt.Printf(">> Recherche de fichiers PDF dans : %s\n", *dir)
+
 	files := collectFiles(*input, *dir, flag.Args())
 	if len(files) == 0 {
-		fmt.Println("❌ Aucun fichier PDF trouvé")
+		fmt.Println("[ERREUR] Aucun fichier PDF trouve")
+		fmt.Println("\nAppuyez sur Entree pour quitter...")
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
 		return
 	}
 
@@ -81,7 +98,10 @@ func main() {
 	var allStats []FileStat
 	var anyFile string
 
+	fmt.Printf(">> %d fichiers trouves. Debut de l'extraction...\n", len(files))
+
 	for _, f := range files {
+		fmt.Printf(".. Traitement de : %s...\n", filepath.Base(f))
 		if anyFile == "" {
 			anyFile = f
 		}
@@ -110,7 +130,32 @@ func main() {
 
 	writeLogFile(filepath.Join(outPath, "extraction_log.tsv"), allStats)
 
-	fmt.Println("✅ Terminé")
+	// Summary stats
+	totalFiles := len(allStats)
+	totalItems := 0
+	totalOCR := 0
+	totalFailed := 0
+	for _, s := range allStats {
+		totalItems += s.Extracted
+		if s.OCR {
+			totalOCR++
+		}
+		if s.Extracted == 0 {
+			totalFailed++
+		}
+	}
+
+	fmt.Printf("\n--- STATISTIQUES FINALES ---\n")
+	fmt.Printf("Fichiers traites       : %d\n", totalFiles)
+	fmt.Printf("Items extraits         : %d\n", totalItems)
+	fmt.Printf("Conversions OCR (auto) : %d\n", totalOCR)
+	fmt.Printf("Echecs (En instance)   : %d\n", totalFailed)
+	fmt.Printf("----------------------------\n")
+
+	fmt.Println("[OK] Termine")
+
+	fmt.Println("\nAppuyez sur Entree pour quitter...")
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
 
 // -----------------------------
@@ -128,22 +173,21 @@ func collectFiles(input, dir string, args []string) []string {
 	}
 
 	if dir != "" {
-		filepath.Walk(dir, func(p string, i os.FileInfo, e error) error {
-			if e != nil {
-				return nil
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			fmt.Printf("[ERREUR] Impossible de lire le dossier %s: %v\n", dir, err)
+			return files
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue // Skip all subfolders (limit to 1 level only)
 			}
-			if i.IsDir() {
-				name := strings.ToLower(i.Name())
-				if name == "en_instance" || name == "out" {
-					return filepath.SkipDir // Never scan these folders
-				}
-				return nil
-			}
+			p := filepath.Join(dir, entry.Name())
 			if strings.HasSuffix(strings.ToLower(p), ".pdf") {
 				files = append(files, p)
 			}
-			return nil
-		})
+		}
 	}
 
 	return files
@@ -160,9 +204,14 @@ func getOutputPath(outdir, input string) string {
 // PROCESS PDF + DEBUG FILE
 // -----------------------------
 func processPDF(path string) ([]Record, FileStat) {
-
 	base := filepath.Base(path)
+	dir := filepath.Dir(path)
 	stat := FileStat{FileName: base, Moved: "N"}
+
+	// Skip files that are already archived or in the error folder
+	if filepath.Base(dir) == "en_instance" || filepath.Base(dir) == "processed" {
+		return nil, stat
+	}
 
 	if DEBUG {
 		logPath := strings.TrimSuffix(path, ".pdf") + "_debug.txt"
@@ -176,100 +225,109 @@ func processPDF(path string) ([]Record, FileStat) {
 
 	text, err := extractText(path)
 	if err != nil {
-		return nil, stat // File couldn't be opened (likely locked). Skip moving.
+		return nil, stat
 	}
 
 	if DEBUG {
 		logDebug("\n========= RAW TEXT =========\n%s", text)
 	}
 
-	// A valid text-based order will always contain the word "Commande".
-	// Scanned images (even with an embedded text barcode) will not.
-	hasCommande := regexp.MustCompile(`(?i)Commande`).MatchString(text)
+	// 1. Initial pass: try to extract text normally
+	blocks := splitBlocks(text)
+	recs := parseAndFilter(blocks, &stat)
 
-	if !hasCommande {
-		fmt.Printf(" ➡ Déplacement de %s vers en_instance (Image/Vide - 'Commande' manquant)\n", base)
+	// --- NEW OCR TRIGGER ---
+	// If no items found OR important fields are missing, try OCR as fallback
+	needsOCR := len(recs) == 0
+	if !needsOCR {
+		for _, r := range recs {
+			if r.Size == "" {
+				needsOCR = true
+				break
+			}
+		}
+	}
+
+	if needsOCR {
+		fmt.Printf(" --> %s : Manque de donnees (Taille/Items). Tentative d'OCR avec NAPS2...\n", base)
+		if err := performOCR(path); err == nil {
+			stat.OCR = true
+			text, _ = extractText(path)
+			
+			// LOG the OCR results for user inspection
+			ocrLogPath := strings.TrimSuffix(path, ".pdf") + "_ocr_raw.txt"
+			os.WriteFile(ocrLogPath, []byte(text), 0644)
+			
+			// Second pass with OCR text
+			blocks = splitBlocks(text)
+			recs = parseAndFilter(blocks, &stat)
+		}
+	}
+
+	// 4. Still no results? Move to en_instance
+	if len(recs) == 0 {
+		fmt.Printf(" --> Deplacement de %s vers en_instance (Echec extraction)\n", base)
 		moveToOCR(path)
 		stat.Moved = "Y"
 		return nil, stat
 	}
 
-	blocks := splitBlocks(text)
-	stat.Processed = len(blocks)
+	stat.Extracted = len(recs)
 
-	if len(blocks) == 0 {
-		logDebug("⚠️ AVERTISSEMENT : Aucun bloc généré. Longueur du texte brut : %d", len(text))
+	// 5. ARCHIVE SUCCESSFUL FILES
+	if stat.Extracted > 0 {
+		moveToProcessed(path)
+		stat.Moved = "P"
 	}
 
-	var out []Record
-	var lastCmd, lastCode, lastNom string
+	return recs, stat
+}
 
-	for i, b := range blocks {
-
-		logDebug("\n----------------------------------")
-		logDebug("BLOC #%d", i+1)
-		logDebug("CONTENU :\n%s", b)
-
-		if strings.Contains(strings.ToLower(b), "sur-mesure: doublure") {
-			logDebug("⛔ IGNORÉ (Doublure)")
-			stat.Skipped++
-			continue
-		}
-
-		// Carry over page-level headers to subsequent blocks
-		if m := regexp.MustCompile(`(?i)(Commande\s*:\s*\S+)`).FindString(b); m != "" {
-			lastCmd = m
-		}
-		if m := regexp.MustCompile(`KLT-[\s\r\n]*\d+`).FindString(b); m != "" {
-			lastCode = m
-		}
-		if m := regexp.MustCompile(`(?si)(Nom\s*:\s*.*?\s*\(KLT-.*?\))`).FindString(b); m != "" {
-			lastNom = m
-		}
-
-		missingHeaders := ""
-		if !regexp.MustCompile(`(?i)Commande\s*:`).MatchString(b) && lastCmd != "" {
-			missingHeaders += lastCmd + "\n"
-		}
-		if !regexp.MustCompile(`KLT-`).MatchString(b) && lastCode != "" {
-			missingHeaders += lastCode + "\n"
-		}
-		if !regexp.MustCompile(`(?i)Nom\s*:`).MatchString(b) && lastNom != "" {
-			missingHeaders += lastNom + "\n"
-		}
-		if missingHeaders != "" {
-			b = missingHeaders + b
-		}
-
-		recs := parseBlock(b)
-
-		// Only keep records that successfully extracted an Order Number
-		for _, r := range recs {
-			if r.OrderNumber != "" {
-				out = append(out, r)
-			}
-		}
+func performOCR(path string) error {
+	// Path to NAPS2.Console.exe relative to current dir
+	exePath := filepath.Join("App", "NAPS2.Console.exe")
+	if _, err := os.Stat(exePath); err != nil {
+		return fmt.Errorf("NAPS2.Console.exe non trouve dans le dossier App")
 	}
 
-	// Post-pass to find the maximum item X per OrderNumber (which becomes Z)
-	maxZPerOrder := make(map[string]int)
-	for _, r := range out {
-		parts := strings.Split(r.OrderItem, "/")
-		if len(parts) >= 1 {
-			if x, err := strconv.Atoi(parts[0]); err == nil && x > maxZPerOrder[r.OrderNumber] {
-				maxZPerOrder[r.OrderNumber] = x
-			}
+	// We overwrite the same file with the OCRed version
+	cmd := exec.Command(exePath,
+		"-i", path,
+		"-o", path,
+		"--ocr",
+		"--ocrlang", "fra", // Using French for OCR
+		"--dpi", "300", // Back to 300 DPI for standard clarity
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("erreur NAPS2: %v - %s", err, stderr.String())
+	}
+	return nil
+}
+
+func moveToProcessed(path string) {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	doneDir := filepath.Join(dir, "processed")
+	os.MkdirAll(doneDir, 0755)
+
+	dest := filepath.Join(doneDir, base)
+	// On Windows, os.Rename fails if destination exists
+	os.Remove(dest)
+
+	if err := os.Rename(path, dest); err != nil {
+		// Fallback for network drives
+		data, err := os.ReadFile(path)
+		if err == nil {
+			os.WriteFile(dest, data, 0644)
+			os.Remove(path)
 		}
 	}
-
-	for i := range out {
-		z := maxZPerOrder[out[i].OrderNumber]
-		out[i].OrderItem = fmt.Sprintf("%s/%d", out[i].OrderItem, z)
-		logDebug("➡ RÉSULTAT : %+v", out[i])
-	}
-
-	stat.Extracted = len(out)
-	return out, stat
+	fmt.Printf("   [DONE] %s archive vers 'processed'\n", base)
 }
 
 // -----------------------------
@@ -291,29 +349,29 @@ func moveToOCR(path string) {
 	os.Remove(dest)
 
 	if err := os.Rename(path, dest); err == nil {
-		fmt.Printf("   ✅ %s déplacé vers en_instance\n", base)
+		fmt.Printf("   [OK] %s deplace vers en_instance\n", base)
 		return
 	}
 
 	// Fallback: Copy and Delete
 	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Printf("   ❌ Échec du déplacement (Lecture) : %v\n", err)
+		fmt.Printf("   [ERREUR] Echec du deplacement (Lecture) : %v\n", err)
 		return
 	}
 	if err := os.WriteFile(dest, data, 0644); err != nil {
-		fmt.Printf("   ❌ Échec du déplacement (Écriture) : %v\n", err)
+		fmt.Printf("   [ERREUR] Echec du deplacement (Ecriture) : %v\n", err)
 		return
 	}
 
 	for i := 0; i < 5; i++ {
 		if err := os.Remove(path); err == nil {
-			fmt.Printf("   ✅ %s copié et supprimé vers en_instance\n", base)
+			fmt.Printf("   [OK] %s copie et supprime vers en_instance\n", base)
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	fmt.Printf("   ⚠️ %s copié vers en_instance, mais l'original est verrouillé et ne peut pas être supprimé.\n", base)
+	fmt.Printf("   [ATTENTION] %s copie vers en_instance, mais l'original est verrouille et ne peut pas etre supprime.\n", base)
 }
 
 // -----------------------------
@@ -334,11 +392,85 @@ func extractText(path string) (string, error) {
 		p := r.Page(i)
 		txt, err := p.GetPlainText(nil)
 		if err != nil {
-			logDebug("⚠️ ERREUR lors de l'analyse de la page %d : %v", i, err)
+			logDebug("[ATTENTION] ERREUR lors de l'analyse de la page %d : %v", i, err)
 		}
 		sb.WriteString(txt + "\n")
 	}
 	return sb.String(), nil
+}
+
+// -----------------------------
+func parseAndFilter(blocks []string, stat *FileStat) []Record {
+	var out []Record
+	var lastCmd, lastCode, lastNom string
+	processedIDs := make(map[string]bool)
+
+	for i, b := range blocks {
+		logDebug("\n----------------------------------")
+		logDebug("BLOC #%d", i+1)
+
+		if strings.Contains(strings.ToLower(b), "sur-mesure: doublure") {
+			logDebug("[SKIP] IGNORE (Doublure)")
+			stat.Skipped++
+			continue
+		}
+
+		// Carry over page-level headers to subsequent blocks
+		if m := regexp.MustCompile(`(?i)(Commande\s*:\s*\S+)`).FindString(b); m != "" {
+			lastCmd = m
+		}
+		if m := regexp.MustCompile(`KLT-[\s\r\n]*\d+`).FindString(b); m != "" {
+			lastCode = m
+		}
+		if m := regexp.MustCompile(`(?si)(Nom\s*:\s*.*?\s*\(KLT-.*?\))`).FindString(b); m != "" {
+			lastNom = m
+		}
+
+		// Re-inject missing headers to ensure parseBlock has full context
+		missingHeaders := ""
+		if !regexp.MustCompile(`(?i)Commande\s*:`).MatchString(b) && lastCmd != "" {
+			missingHeaders += lastCmd + "\n"
+		}
+		if !regexp.MustCompile(`KLT-`).MatchString(b) && lastCode != "" {
+			missingHeaders += lastCode + "\n"
+		}
+		if !regexp.MustCompile(`(?i)Nom\s*:`).MatchString(b) && lastNom != "" {
+			missingHeaders += lastNom + "\n"
+		}
+		if missingHeaders != "" {
+			b = missingHeaders + b
+		}
+
+		recs := parseBlock(b)
+
+		// Only keep records that successfully extracted an Order Number
+		for _, r := range recs {
+			// Avoid exact duplicates in the same file (footer barcodes)
+			uniqueKey := r.OrderNumber + "|" + r.OrderItem + "|" + r.Size
+			if r.OrderNumber != "" && !processedIDs[uniqueKey] {
+				out = append(out, r)
+				processedIDs[uniqueKey] = true
+			}
+		}
+	}
+
+	// Post-pass to find the maximum item X per OrderNumber (which becomes Z)
+	maxZPerOrder := make(map[string]int)
+	for _, r := range out {
+		parts := strings.Split(r.OrderItem, "/")
+		if len(parts) >= 1 {
+			if x, err := strconv.Atoi(parts[0]); err == nil && x > maxZPerOrder[r.OrderNumber] {
+				maxZPerOrder[r.OrderNumber] = x
+			}
+		}
+	}
+
+	for i := range out {
+		z := maxZPerOrder[out[i].OrderNumber]
+		out[i].OrderItem = fmt.Sprintf("%s/%d", out[i].OrderItem, z)
+	}
+
+	return out
 }
 
 // -----------------------------
@@ -347,14 +479,17 @@ func splitBlocks(text string) []string {
 	text = strings.ReplaceAll(text, "\u00A0", " ")
 	text = strings.ReplaceAll(text, "\r", "")
 
-	re := regexp.MustCompile(`(?i)Sur-mesure\s*:\s*(Tenture|Doublure|Commande\s*Tissu)`)
+	// Match any "Sur-mesure: <type>" header. We accept ALL types and only
+	// exclude "Doublure" blocks below. This avoids silently dropping new
+	// order types (e.g. "Store bateau") that aren't in a whitelist.
+	re := regexp.MustCompile(`(?i)Sur-mesure\s*:\s*\S+`)
 
 	var blocks []string
 	matches := re.FindAllStringSubmatchIndex(text, -1)
 
 	if len(matches) > 0 {
 		for i, m := range matches {
-			kind := strings.ToLower(strings.TrimSpace(text[m[2]:m[3]]))
+			matchedText := strings.ToLower(strings.TrimSpace(text[m[0]:m[1]]))
 
 			start := 0
 			if i > 0 {
@@ -365,17 +500,17 @@ func splitBlocks(text string) []string {
 				nextStart = matches[i+1][0]
 			}
 			body := strings.TrimSpace(text[start:nextStart])
-			if kind != "doublure" {
+			if !strings.Contains(matchedText, "doublure") {
 				blocks = append(blocks, body)
 			}
 		}
 		return blocks
 	}
 
-	// Fallback 1: Split by Commande if no Sur-mesure label exists
+	// Fallback 1: Split by Commande (Labeled)
 	reCmd := regexp.MustCompile(`(?i)Commande\s*:`)
 	cmdMatches := reCmd.FindAllStringSubmatchIndex(text, -1)
-	if len(cmdMatches) > 0 {
+	if len(cmdMatches) > 1 {
 		for i, m := range cmdMatches {
 			start := m[0]
 			nextStart := len(text)
@@ -383,15 +518,48 @@ func splitBlocks(text string) []string {
 				nextStart = cmdMatches[i+1][0]
 			}
 			body := strings.TrimSpace(text[start:nextStart])
-			if !strings.Contains(strings.ToLower(body), "doublure") {
-				blocks = append(blocks, body)
-			}
+			blocks = append(blocks, body)
 		}
 		return blocks
 	}
 
-	// Fallback 2: Entire text
-	if strings.TrimSpace(text) != "" && !strings.Contains(strings.ToLower(text), "doublure") {
+	// Fallback 2: Split by Raw Order Number (XXXX.XXXXX.XXX) - Common in OCR
+	reRawOrder := regexp.MustCompile(`(?m)^[A-Z0-9]{4}\.[A-Z0-9]{5}\.[A-Z0-9]{3}\s*$`)
+	rawMatches := reRawOrder.FindAllStringSubmatchIndex(text, -1)
+	if len(rawMatches) > 1 {
+		seen := make(map[string]bool)
+		for i, m := range rawMatches {
+			start := m[0]
+			id := strings.TrimSpace(text[m[0]:m[1]])
+
+			// 1. Skip if it looks like a barcode (asterisks)
+			if start > 0 && text[start-1] == '*' {
+				continue
+			}
+			// 2. Skip if we just saw this ID (likely same record barcode footer)
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+
+			nextStart := len(text)
+			if i+1 < len(rawMatches) {
+				nextStart = rawMatches[i+1][0]
+			}
+			body := strings.TrimSpace(text[start:nextStart])
+
+			// 3. Skip tiny blocks
+			if len(strings.Split(body, "\n")) < 5 {
+				continue
+			}
+
+			blocks = append(blocks, body)
+		}
+		return blocks
+	}
+
+	// Fallback 3: Entire text
+	if strings.TrimSpace(text) != "" {
 		blocks = append(blocks, text)
 	}
 
@@ -419,65 +587,53 @@ func extractOrderFields(fullCmd string) (string, int, int) {
 }
 
 // -----------------------------
+func isValValidPiece(val string) bool {
+	if val == "" {
+		return false
+	}
+	lval := strings.ToLower(val)
+	// Blacklist: Not a piece if it contains these "noise" words
+	blacklist := []string{"klt-", "d[eéè]tails", "commande", "sur-mesure", "tissu", "nombre", "m[eéè]chanisme", "child-safety", "benodigd", "cm", "mm"}
+	for _, b := range blacklist {
+		if regexp.MustCompile("(?i)"+b).MatchString(lval) {
+			return false
+		}
+	}
+	// Check if it looks like an address/street
+	if regexp.MustCompile(`^\d+\s+\w+`).MatchString(val) {
+		return false
+	}
+	return true
+}
+
+// -----------------------------
 func extractPiece(block string) string {
 	logDebug("ENTRÉE EXTRACTPIECE : %.200s", block)
 
-	// Try to find the 'Pièce:' label anywhere and extract until the next known label.
-	rePiece := regexp.MustCompile(`(?i)(?:Pi[eéè]ce\s*:|Piece\s*:)`)
+	// 1. Label-based search
+	rePiece := regexp.MustCompile(`(?i)(?:Pi[eéè]ce\s*:|Piece\s*:|Stuk\s*:)`)
 	if loc := rePiece.FindStringIndex(block); loc != nil {
 		start := loc[1]
 		rest := block[start:]
-		reNext := regexp.MustCompile(`(?i)(Détails|Details|Nom\s*:|Rue\s*:|Référence\s*:|Commande\s*:|Pi[eéè]ce\s*:|Piece\s*:)`)
+		reNext := regexp.MustCompile(`(?i)(D[eéè]tails|Nom\s*:|Rue\s*:|R[eé]f[eé]rence\s*:|Commande\s*:|Pi[eéè]ce\s*:|Stuk\s*:|Tissu)`)
 		if nloc := reNext.FindStringIndex(rest); nloc != nil {
 			val := strings.TrimSpace(rest[:nloc[0]])
 			val = strings.Join(strings.Fields(val), " ")
-			if val != "" {
-				return val
-			}
-		} else {
-			val := strings.TrimSpace(rest)
-			val = strings.Join(strings.Fields(val), " ")
-			if val != "" {
+			if isValValidPiece(val) {
 				return val
 			}
 		}
 	}
 
-	// Fallback: original line-based logic
+	// 2. OCR Line fallback
 	lines := strings.Split(block, "\n")
-
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		lline := strings.ToLower(line)
-
-		if strings.HasPrefix(lline, "pièce") || strings.HasPrefix(lline, "piece") {
-
-			idx := strings.Index(line, ":")
-			if idx == -1 {
-				continue
+		if isValValidPiece(line) {
+			// We only take long lines which aren't other labels
+			if len(line) > 5 && !strings.Contains(line, ":") {
+				return line
 			}
-			val := strings.TrimSpace(line[idx+1:])
-
-			if val == "" {
-				return ""
-			}
-
-			words := strings.Fields(val)
-
-			if len(words) > 0 && strings.Contains(words[0], ":") {
-				return ""
-			}
-
-			var result []string
-
-			for _, w := range words {
-				if strings.Contains(w, ":") {
-					break
-				}
-				result = append(result, w)
-			}
-
-			return strings.Join(result, " ")
 		}
 	}
 
@@ -490,21 +646,36 @@ func parseBlock(block string) []Record {
 	norm := strings.ReplaceAll(block, "\u00A0", " ")
 	norm = strings.ReplaceAll(norm, "\r", "")
 	// Ensure common field labels appear on their own line when PDFs collapse
-	// spacing (e.g. "Référence:L0102...Pièce:Fenêtre G").
-	labelRe := regexp.MustCompile(`(?i)(Commande\s*:|Nom\s*:|Rue\s*:|Code postal\s*:|Domicilié à\s*:|Référence\s*:|Pi[eéè]ce\s*:|Détails tissu\s*:|Détails\s*:|Hauteur\s*:|Largeur\s*:|À gauche|À droite|Gauge\s*:|Droite\s*:)`)
+	// spacing. Added Dutch labels for OCR support.
+	labelRe := regexp.MustCompile(`(?i)(Commande\s*:|Nom\s*:|Rue\s*:|Code postal\s*:|Domicilié à\s*:|R[eé]f[eé]rence\s*:|Pi[eéè]ce\s*:|Stuk\s*:|Détails tissu\s*:|Détails\s*:|Hauteur\s*:|Hoogte\s*:|Largeur\s*:|Breedte\s*:|À gauche|À droite|Gauge\s*:|Droite\s*:)`)
 	norm = labelRe.ReplaceAllString(norm, "\n$1")
 
 	rec := Record{}
 
 	var itemX, itemY int
-	reCmd := regexp.MustCompile(`(?i)Commande\s*:\s*(\S+)`)
+	// Support 3 or 4 part IDs (e.g. 60FG.00001.001.001)
+	reCmd := regexp.MustCompile(`(?i)Commande\s*[:\s]*([A-Z0-9]{4}\.[A-Z0-9]{5}(?:\.[A-Z0-9]{3,4})+)`)
+	reRawCmd := regexp.MustCompile(`([A-Z0-9]{4}\.[A-Z0-9]{5}(?:\.[A-Z0-9]{3,4})+)`)
+
 	if m := reCmd.FindStringSubmatch(norm); m != nil {
 		rec.OrderNumber, itemX, itemY = extractOrderFields(m[1])
+	} else if m := reRawCmd.FindStringSubmatch(norm); m != nil {
+		rec.OrderNumber, itemX, itemY = extractOrderFields(m[0])
+	}
+
+	reRef := regexp.MustCompile(`(?i)R[eé]f[eé]rence\s*[:\s]+([^\n\r]*)`)
+	if m := reRef.FindStringSubmatch(norm); m != nil {
+		rec.Reference = strings.TrimSpace(m[1])
 	}
 
 	reCode := regexp.MustCompile(`(?i)KLT-[\s\r\n]*(\d+)`)
 	if cm := reCode.FindStringSubmatch(norm); len(cm) > 1 {
 		rec.ClientCode = cm[1]
+	} else {
+		reRawCode := regexp.MustCompile(`\(KLT-(\d+)\)`)
+		if cm := reRawCode.FindStringSubmatch(norm); len(cm) > 1 {
+			rec.ClientCode = cm[1]
+		}
 	}
 
 	reNom := regexp.MustCompile(`(?si)Nom\s*:\s*(.*?)\s*\(KLT-.*?\)`)
@@ -512,22 +683,32 @@ func parseBlock(block string) []Record {
 		rec.ClientName = strings.Join(strings.Fields(m[1]), " ")
 	}
 
-	// The previous multi-line regex for Reference was too greedy and would
-	// capture text between the reference and the next known label.
-	// This simpler, single-line regex is more robust and avoids capturing
-	// unrelated text from subsequent lines.
-	reRef := regexp.MustCompile(`(?i)Référence\s*:\s*([^\n\r]*)`)
-	if m := reRef.FindStringSubmatch(norm); m != nil {
-		rec.Reference = strings.TrimSpace(m[1])
-	}
-
 	rec.Piece = extractPiece(norm)
+
+	// --- OCR POSITIONAL FALLBACK ---
+	// If Piece was blank or invalid, try to find it avoiding Name/Address fields
+	if rec.Piece == "" {
+		lines := strings.Split(norm, "\n")
+		for _, l := range lines {
+			l = strings.TrimSpace(l)
+			if isValValidPiece(l) {
+				rec.Piece = l
+				break
+			}
+		}
+	}
 
 	// -----------------------------
 	// SPLIT DEBUG
 	// -----------------------------
 	logDebug("\n--- DÉBOGAGE DE SÉPARATION ---")
 	logDebug("Aperçu : %.200s", block)
+
+	// Final check: if OrderNumber is missing, try raw regex one last time
+	if rec.OrderNumber == "" {
+		reRawOrder := regexp.MustCompile(`[A-Z0-9]{4}\.[A-Z0-9]{5}\.[A-Z0-9]{3}`)
+		rec.OrderNumber = reRawOrder.FindString(norm)
+	}
 
 	// Require a colon or whitespace after 'Hauteur' to avoid matching other
 	// occurrences like 'grand hauteur... 10 cm' earlier in the block.
@@ -579,7 +760,7 @@ func parseBlock(block string) []Record {
 			results = append(results, r2)
 		}
 
-		logDebug("NOMBRE DE RÉSULTATS DE SÉPARATION : %d", len(results))
+		logDebug("NOMBRE DE RESULTATS DE SEPARATION : %d", len(results))
 
 		return results
 	}
@@ -591,12 +772,11 @@ func parseBlock(block string) []Record {
 
 // -----------------------------
 func extractSize(block string) string {
+	h, w := "", ""
 
-	reH := regexp.MustCompile(`(?i)Hauteur\s*:\s*([\d.,]+)`)
-	reW := regexp.MustCompile(`(?i)Largeur\s*:\s*([\d.,]+)`)
-
-	h := ""
-	w := ""
+	// 1. Label-based search (Permissive for spacing and Dutch)
+	reH := regexp.MustCompile(`(?i)(?:Hauteur|Hoogte|Height)\s*[:\s]*([\d.,]+)`)
+	reW := regexp.MustCompile(`(?i)(?:Largeur|Breedte|Width)\s*[:\s]*([\d.,]+)`)
 
 	if m := reH.FindStringSubmatch(block); m != nil {
 		h = strings.ReplaceAll(m[1], ",", ".")
@@ -605,16 +785,48 @@ func extractSize(block string) string {
 		w = strings.ReplaceAll(m[1], ",", ".")
 	}
 
+	// 2. OCR Fallback (No labels, just "Width x Height" or floating numbers near end)
+	if h == "" || w == "" {
+		reOCR := regexp.MustCompile(`(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)`)
+		if m := reOCR.FindStringSubmatch(block); m != nil {
+			return m[2] + " x " + m[1]
+		}
+		// Special heuristic for "154.5 cm \n 90.5 cm" appearance
+		reCM := regexp.MustCompile(`([\d.,]+)\s*cm`)
+		matches := reCM.FindAllStringSubmatch(block, -1)
+		if len(matches) >= 2 {
+			// Usually the last two such numbers are H and W.
+			// H is usually above W in these layouts.
+			hRaw := matches[len(matches)-2][1]
+			wRaw := matches[len(matches)-1][1]
+			h = strings.ReplaceAll(hRaw, ",", ".")
+			w = strings.ReplaceAll(wRaw, ",", ".")
+		}
+	}
+
 	if w != "" && h != "" {
+		reGaucheVal := regexp.MustCompile(`(?i)(?:À|A|à|a)\s*gauche[:\s]*([\d.,]+)`)
+		reDroiteVal := regexp.MustCompile(`(?i)(?:À|A|à|a)\s*droite[:\s]*([\d.,]+)`)
+
+		gValStr := ""
+		if m := reGaucheVal.FindStringSubmatch(block); m != nil {
+			gValStr = strings.ReplaceAll(m[1], ",", ".")
+		}
+		dValStr := ""
+		if m := reDroiteVal.FindStringSubmatch(block); m != nil {
+			dValStr = strings.ReplaceAll(m[1], ",", ".")
+		}
+
+		gVal, _ := strconv.ParseFloat(gValStr, 64)
+		dVal, _ := strconv.ParseFloat(dValStr, 64)
+
+		if gVal > 0 && dVal > 0 {
+			if wVal, err := strconv.ParseFloat(w, 64); err == nil {
+				w = strconv.FormatFloat(wVal/2, 'f', -1, 64)
+			}
+		}
 		return w + " x " + h
 	}
-
-	// Fallback for cases like 'Commande Tissu' where only 'Hauteur de coupe' exists
-	reHC := regexp.MustCompile(`(?i)Hauteur de coupe\s*[:]?\s*([\d.,]+)`)
-	if m := reHC.FindStringSubmatch(block); m != nil {
-		return strings.ReplaceAll(m[1], ",", ".")
-	}
-
 	return ""
 }
 
@@ -639,7 +851,8 @@ func exportCSV(r []Record, f string) {
 
 func exportExcel(r []Record, f string) {
 	ex := excelize.NewFile()
-	s := ex.GetSheetName(0)
+	s := "Orders"
+	ex.SetSheetName(ex.GetSheetName(0), s)
 
 	headers := []string{"OrderNumber", "OrderItem", "ClientCode", "ClientName", "Reference", "Piece", "Size"}
 	for i, h := range headers {
@@ -670,9 +883,9 @@ func exportExcel(r []Record, f string) {
 	}
 
 	if err := ex.SaveAs(f); err != nil {
-		fmt.Printf("❌ ERREUR lors de la sauvegarde du fichier Excel (est-il ouvert ?) : %v\n", err)
+		fmt.Printf("[ERREUR] ERREUR lors de la sauvegarde du fichier Excel (est-il ouvert ?) : %v\n", err)
 	} else {
-		fmt.Printf("✅ %d lignes écrites avec succès dans Excel !\n", len(r))
+		fmt.Printf("[OK] %d lignes ecrites avec succes dans Excel !\n", len(r))
 	}
 }
 
@@ -685,7 +898,7 @@ func writeLogFile(logPath string, stats []FileStat) {
 
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("❌ ERREUR lors de l'ouverture du fichier journal: %v\n", err)
+		fmt.Printf("[ERREUR] ERREUR lors de l'ouverture du fichier journal: %v\n", err)
 		return
 	}
 	defer f.Close()
