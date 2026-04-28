@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,12 +43,62 @@ type FileStat struct {
 }
 
 // -----------------------------
-var DEBUG bool
+var DEBUG = false
 var debugFile *os.File
 
 func logDebug(format string, a ...interface{}) {
 	if DEBUG && debugFile != nil {
 		fmt.Fprintf(debugFile, format+"\n", a...)
+	}
+}
+
+// startServer launches a background HTTP server to receive PDFs directly from the Chrome Extension
+func startServer() {
+	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		// Allow the Chrome Extension to talk to us
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method != "POST" {
+			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read body", http.StatusInternalServerError)
+			return
+		}
+
+		// Save the file to the 'in/' folder
+		inDir := filepath.Join(filepath.Dir(os.Args[0]), "in")
+		os.MkdirAll(inDir, 0755) // Ensure directory exists
+
+		filename := fmt.Sprintf("Commandes_%d.pdf", time.Now().Unix())
+		outPath := filepath.Join(inDir, filename)
+
+		err = os.WriteFile(outPath, body, 0644)
+		if err != nil {
+			fmt.Printf("\n[ERREUR SERVEUR] Impossible d'enregistrer %s: %v\n", filename, err)
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Printf("\n[SERVEUR] 🚀 Fichier reçu et enregistré avec succès : in\\%s\n", filename)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Success"))
+	})
+
+	fmt.Println("[SERVEUR] En écoute sur le port 8765 (Prêt pour l'extension Chrome)...")
+	err := http.ListenAndServe(":8765", nil)
+	if err != nil {
+		fmt.Printf("[ERREUR SERVEUR] %v\n", err)
 	}
 }
 
@@ -56,6 +108,9 @@ func logDebug(format string, a ...interface{}) {
 func main() {
 
 	fmt.Println(">> Demarrage du programme Go...")
+
+	runServer := flag.Bool("server", false, "")
+	nowait := flag.Bool("nowait", false, "")
 
 	input := flag.String("input", "", "")
 	dir := flag.String("dir", "", "")
@@ -67,6 +122,12 @@ func main() {
 	debug := flag.Bool("debug", false, "")
 
 	flag.Parse()
+
+	if *runServer {
+		fmt.Println(">> Démarrage en MODE SERVEUR. Gardez cette fenêtre ouverte en arrière-plan.")
+		startServer() // Blocks forever
+		return
+	}
 	DEBUG = *debug
 	if DEBUG {
 		pdf.DebugOn = true
@@ -154,8 +215,10 @@ func main() {
 
 	fmt.Println("[OK] Termine")
 
-	fmt.Println("\nAppuyez sur Entree pour quitter...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	if !*nowait {
+		fmt.Println("\nAppuyez sur Entree pour quitter...")
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
+	}
 }
 
 // -----------------------------
@@ -184,7 +247,8 @@ func collectFiles(input, dir string, args []string) []string {
 				continue // Skip all subfolders (limit to 1 level only)
 			}
 			p := filepath.Join(dir, entry.Name())
-			if strings.HasSuffix(strings.ToLower(p), ".pdf") {
+			ext := strings.ToLower(filepath.Ext(p))
+			if ext == ".pdf" || ext == ".txt" {
 				files = append(files, p)
 			}
 		}
@@ -223,9 +287,21 @@ func processPDF(path string) ([]Record, FileStat) {
 		logDebug("==========================================")
 	}
 
-	text, err := extractText(path)
-	if err != nil {
-		return nil, stat
+	ext := strings.ToLower(filepath.Ext(path))
+	var text string
+	var err error
+
+	if ext == ".txt" {
+		content, err2 := os.ReadFile(path)
+		if err2 != nil {
+			return nil, stat
+		}
+		text = string(content)
+	} else {
+		text, err = extractText(path)
+		if err != nil {
+			return nil, stat
+		}
 	}
 
 	if DEBUG {
@@ -253,15 +329,19 @@ func processPDF(path string) ([]Record, FileStat) {
 		if err := performOCR(path); err == nil {
 			stat.OCR = true
 			text, _ = extractText(path)
-			
+
 			// LOG the OCR results for user inspection
 			ocrLogPath := strings.TrimSuffix(path, ".pdf") + "_ocr_raw.txt"
 			os.WriteFile(ocrLogPath, []byte(text), 0644)
-			
+
 			// Second pass with OCR text
 			blocks = splitBlocks(text)
 			recs = parseAndFilter(blocks, &stat)
 		}
+	} else if ext == ".txt" {
+		// For .txt files, we go straight to parsing
+		blocks = splitBlocks(text)
+		recs = parseAndFilter(blocks, &stat)
 	}
 
 	// 4. Still no results? Move to en_instance
@@ -595,9 +675,13 @@ func isValValidPiece(val string) bool {
 	// Blacklist: Not a piece if it contains these "noise" words
 	blacklist := []string{"klt-", "d[eéè]tails", "commande", "sur-mesure", "tissu", "nombre", "m[eéè]chanisme", "child-safety", "benodigd", "cm", "mm"}
 	for _, b := range blacklist {
-		if regexp.MustCompile("(?i)"+b).MatchString(lval) {
+		if regexp.MustCompile("(?i)" + b).MatchString(lval) {
 			return false
 		}
+	}
+	// Check if it looks like an Order Number or Item ID (e.g. 0000.03980.001)
+	if regexp.MustCompile(`\d{4}\.\d{5}`).MatchString(val) {
+		return false
 	}
 	// Check if it looks like an address/street
 	if regexp.MustCompile(`^\d+\s+\w+`).MatchString(val) {
@@ -646,8 +730,8 @@ func parseBlock(block string) []Record {
 	norm := strings.ReplaceAll(block, "\u00A0", " ")
 	norm = strings.ReplaceAll(norm, "\r", "")
 	// Ensure common field labels appear on their own line when PDFs collapse
-	// spacing. Added Dutch labels for OCR support.
-	labelRe := regexp.MustCompile(`(?i)(Commande\s*:|Nom\s*:|Rue\s*:|Code postal\s*:|Domicilié à\s*:|R[eé]f[eé]rence\s*:|Pi[eéè]ce\s*:|Stuk\s*:|Détails tissu\s*:|Détails\s*:|Hauteur\s*:|Hoogte\s*:|Largeur\s*:|Breedte\s*:|À gauche|À droite|Gauge\s*:|Droite\s*:)`)
+	// spacing. Added Dutch labels and fuzzy support for OCR typos (Hauteu, etc.)
+	labelRe := regexp.MustCompile(`(?i)(Commande\s*[:\s\._]*|Nom\s*[:\s\._]*|Rue\s*[:\s\._]*|Code postal\s*[:\s\._]*|Domicilié à\s*[:\s\._]*|R[eé]f[eé]rence\s*[:\s\._]*|Pi[eéè]ce\s*[:\s\._]*|Stuk\s*[:\s\._]*|Détails tissu\s*[:\s\._]*|Détails\s*[:\s\._]*|Hauteu[r]?\s*[:\s\._]*|Hoogte\s*[:\s\._]*|Largeu[r]?\s*[:\s\._]*|Breedte\s*[:\s\._]*|À gauche|À droite|Gauge\s*[:\s\._]*|Droite\s*[:\s\._]*)`)
 	norm = labelRe.ReplaceAllString(norm, "\n$1")
 
 	rec := Record{}
@@ -704,10 +788,30 @@ func parseBlock(block string) []Record {
 	logDebug("\n--- DÉBOGAGE DE SÉPARATION ---")
 	logDebug("Aperçu : %.200s", block)
 
-	// Final check: if OrderNumber is missing, try raw regex one last time
-	if rec.OrderNumber == "" {
-		reRawOrder := regexp.MustCompile(`[A-Z0-9]{4}\.[A-Z0-9]{5}\.[A-Z0-9]{3}`)
-		rec.OrderNumber = reRawOrder.FindString(norm)
+	// --- POSITIONAL FALLBACK FOR LABEL-LESS LAYOUTS ---
+	// If standard labels failed, we use the known order:
+	// Line 1: ID, Line 2: Ref, Line 3: Piece
+	if rec.Reference == "" || rec.Piece == "" {
+		lines := strings.Split(norm, "\n")
+		var cleanLines []string
+		for _, l := range lines {
+			l = strings.TrimSpace(l)
+			if l != "" {
+				cleanLines = append(cleanLines, l)
+			}
+		}
+
+		if len(cleanLines) >= 3 {
+			// Check if first line is our ID pattern
+			if regexp.MustCompile(`\d{4}\.\d{5}\.\d{3}`).MatchString(cleanLines[0]) {
+				if rec.Reference == "" {
+					rec.Reference = cleanLines[1]
+				}
+				if rec.Piece == "" {
+					rec.Piece = cleanLines[2]
+				}
+			}
+		}
 	}
 
 	// Require a colon or whitespace after 'Hauteur' to avoid matching other
@@ -765,38 +869,103 @@ func parseBlock(block string) []Record {
 		return results
 	}
 
+	// Regex to check if values are > 0 (Permissive for newlines and Dutch)
+	reLeftVal := regexp.MustCompile(`(?is)(?:gauche|links)[\r\n\s\.:\-_]*([1-9]\d*)`)
+	reRightVal := regexp.MustCompile(`(?is)(?:droite|rechts)[\r\n\s\.:\-_]*([1-9]\d*)`)
+	isLeftPos := reLeftVal.MatchString(norm)
+	isRightPos := reRightVal.MatchString(norm)
+
+	// CASE A: Gauche/Droite values found (The "Paire" rule)
+	if isLeftPos && isRightPos && hStr != "" {
+		sz := extractSize(norm)
+		if sz != "" {
+			// Clean "cm" or other junk from the size string before math
+			sz = regexp.MustCompile(`(?i)\s*cm`).ReplaceAllString(sz, "")
+			parts := strings.Split(sz, " x ")
+			if len(parts) == 2 {
+				wStr := strings.TrimSpace(parts[0])
+				hVal := strings.TrimSpace(parts[1])
+				
+				wVal, err := strconv.ParseFloat(strings.ReplaceAll(wStr, ",", "."), 64)
+				if err == nil && wVal > 0 {
+					halfW := wVal / 2
+					
+					r1 := rec
+					r1.OrderItem = fmt.Sprintf("%d/1", itemX)
+					r1.Size = fmt.Sprintf("%.1f x %s", halfW, hVal)
+					
+					r2 := rec
+					r2.OrderItem = fmt.Sprintf("%d/2", itemX)
+					r2.Size = fmt.Sprintf("%.1f x %s", halfW, hVal)
+					
+					logDebug("RÈGLE PAIRE APPLIQUÉE: %.1f x %s", halfW, hVal)
+					return []Record{r1, r2}
+				}
+			}
+		}
+	}
+
 	rec.OrderItem = fmt.Sprintf("%d/%d", itemX, itemY)
 	rec.Size = extractSize(norm)
+
+	// If Client Info is still missing, we might have a block that missed the header
+	// but contains the data elsewhere. One last check:
+	if rec.ClientName == "" {
+		if m := regexp.MustCompile(`(?i)Nom\s*[:\s]+([^\n\r\(]*)`).FindStringSubmatch(norm); m != nil {
+			rec.ClientName = strings.TrimSpace(m[1])
+		}
+	}
+
 	return []Record{rec}
 }
 
-// -----------------------------
 func extractSize(block string) string {
 	h, w := "", ""
 
-	// 1. Label-based search (Permissive for spacing and Dutch)
-	reH := regexp.MustCompile(`(?i)(?:Hauteur|Hoogte|Height)\s*[:\s]*([\d.,]+)`)
-	reW := regexp.MustCompile(`(?i)(?:Largeur|Breedte|Width)\s*[:\s]*([\d.,]+)`)
+	// 1. Strict Label-based search (Requires colon - ignores stray "Largeur 235" junk)
+	reHStrict := regexp.MustCompile(`(?i)(?:Hauteu[r]?|Hoogte|Height)\s*:\s*([\d.,]+)`)
+	reWStrict := regexp.MustCompile(`(?i)(?:Largeu[r]?|Breedte|Width)\s*:\s*([\d.,]+)`)
 
-	if m := reH.FindStringSubmatch(block); m != nil {
+	if m := reHStrict.FindStringSubmatch(block); m != nil {
 		h = strings.ReplaceAll(m[1], ",", ".")
 	}
-	if m := reW.FindStringSubmatch(block); m != nil {
+	if m := reWStrict.FindStringSubmatch(block); m != nil {
 		w = strings.ReplaceAll(m[1], ",", ".")
 	}
 
-	// 2. OCR Fallback (No labels, just "Width x Height" or floating numbers near end)
+	// 2. Permissive Label-based search (Fallback if OCR lost the colon)
+	if h == "" {
+		reH := regexp.MustCompile(`(?i)(?:Hauteu[r]?|Hoogte|Height)[\s\.:\-_=]*([\d.,]+)`)
+		if m := reH.FindStringSubmatch(block); m != nil {
+			h = strings.ReplaceAll(m[1], ",", ".")
+		}
+	}
+	if w == "" {
+		reW := regexp.MustCompile(`(?i)(?:Largeu[r]?|Breedte|Width)[\s\.:\-_=]*([\d.,]+)`)
+		if m := reW.FindStringSubmatch(block); m != nil {
+			w = strings.ReplaceAll(m[1], ",", ".")
+		}
+	}
+
+	// 3. OCR Fallback (No labels, just "Width x Height")
 	if h == "" || w == "" {
+		// IMPORTANT: Ignore the "Benodigd" line which often contains "Quantity x Width"
+		cleanOCR := regexp.MustCompile(`(?i).*Benodigd.*`).ReplaceAllString(block, "")
+
 		reOCR := regexp.MustCompile(`(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)`)
-		if m := reOCR.FindStringSubmatch(block); m != nil {
-			return m[2] + " x " + m[1]
+		if m := reOCR.FindStringSubmatch(cleanOCR); m != nil {
+			v1, _ := strconv.ParseFloat(m[1], 64)
+			v2, _ := strconv.ParseFloat(m[2], 64)
+
+			// Heuristic: If one number is very small (1, 2, 3...) it's likely a quantity, not a size.
+			if v1 > 5 && v2 > 5 {
+				return m[1] + " x " + m[2]
+			}
 		}
 		// Special heuristic for "154.5 cm \n 90.5 cm" appearance
 		reCM := regexp.MustCompile(`([\d.,]+)\s*cm`)
 		matches := reCM.FindAllStringSubmatch(block, -1)
 		if len(matches) >= 2 {
-			// Usually the last two such numbers are H and W.
-			// H is usually above W in these layouts.
 			hRaw := matches[len(matches)-2][1]
 			wRaw := matches[len(matches)-1][1]
 			h = strings.ReplaceAll(hRaw, ",", ".")
@@ -805,27 +974,12 @@ func extractSize(block string) string {
 	}
 
 	if w != "" && h != "" {
-		reGaucheVal := regexp.MustCompile(`(?i)(?:À|A|à|a)\s*gauche[:\s]*([\d.,]+)`)
-		reDroiteVal := regexp.MustCompile(`(?i)(?:À|A|à|a)\s*droite[:\s]*([\d.,]+)`)
-
-		gValStr := ""
-		if m := reGaucheVal.FindStringSubmatch(block); m != nil {
-			gValStr = strings.ReplaceAll(m[1], ",", ".")
-		}
-		dValStr := ""
-		if m := reDroiteVal.FindStringSubmatch(block); m != nil {
-			dValStr = strings.ReplaceAll(m[1], ",", ".")
-		}
-
-		gVal, _ := strconv.ParseFloat(gValStr, 64)
-		dVal, _ := strconv.ParseFloat(dValStr, 64)
-
-		if gVal > 0 && dVal > 0 {
-			if wVal, err := strconv.ParseFloat(w, 64); err == nil {
-				w = strconv.FormatFloat(wVal/2, 'f', -1, 64)
-			}
-		}
+		// IMPORTANT: DO NOT divide by 2 here. The 'Paire' rule division 
+		// is explicitly handled in parseBlock. Doing it here causes a double-division.
 		return w + " x " + h
+	}
+	if w != "" {
+		return w
 	}
 	return ""
 }
@@ -883,7 +1037,10 @@ func exportExcel(r []Record, f string) {
 	}
 
 	if err := ex.SaveAs(f); err != nil {
-		fmt.Printf("[ERREUR] ERREUR lors de la sauvegarde du fichier Excel (est-il ouvert ?) : %v\n", err)
+		fmt.Printf("\n[ERREUR FATALE] Impossible de sauvegarder le fichier Excel : %v\n", err)
+		fmt.Printf("--> VERIFIEZ QUE LE FICHIER N'EST PAS OUVERT DANS EXCEL !\n")
+		fmt.Println("\nAppuyez sur Entree pour quitter...")
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
 	} else {
 		fmt.Printf("[OK] %d lignes ecrites avec succes dans Excel !\n", len(r))
 	}

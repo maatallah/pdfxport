@@ -1,0 +1,12 @@
+/in/
+/out/
+/App/
+/dbg/
+/BulkOrder/
+*.pdf
+*.xlsx
+*.tsv
+*.exe
+*.exe~
+*.7z
+*.txt
