@@ -1,11 +1,11 @@
 @echo off
-title Decoloop Auto-Downloader Server
+title Serveur téléchargement automatique (Decoloop)
 color 0B
 echo =======================================
-echo     DECOLOOP BACKGROUND SERVER
+echo     CPT DECOLOOP SERVER
 echo =======================================
 echo.
-echo Ce serveur doit rester ouvert pour recevoir les fichiers de l'extension Chrome.
+echo Ce serveur doit rester ouvert pour recevoir les fichiers PDF.
 echo Vous pouvez reduire cette fenetre.
 echo.
 "%~dp0ptxrid.exe" -server

@@ -95,8 +95,9 @@ func startServer() {
 		w.Write([]byte("Success"))
 	})
 
-	fmt.Println("[SERVEUR] En écoute sur le port 8765 (Prêt pour l'extension Chrome)...")
-	err := http.ListenAndServe(":8765", nil)
+	fmt.Println("[SERVEUR] En écoute sur localhost:8765 (Sécurisé - Prêt pour l'extension Chrome)...")
+	// Listen ONLY on localhost (127.0.0.1) so no external machines can hit this port
+	err := http.ListenAndServe("127.0.0.1:8765", nil)
 	if err != nil {
 		fmt.Printf("[ERREUR SERVEUR] %v\n", err)
 	}
