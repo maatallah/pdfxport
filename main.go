@@ -975,6 +975,20 @@ func extractSize(block string) string {
 		}
 	}
 
+	// 4. Special fallback for "Hauteur de coupe" (Commande Tissu)
+	if h == "" {
+		reHC := regexp.MustCompile(`(?i)Hauteur de coupe\s*[:]?\s*([\d.,]+)`)
+		if m := reHC.FindStringSubmatch(block); m != nil {
+			h = strings.ReplaceAll(m[1], ",", ".")
+		}
+	}
+	if w == "" {
+		reWC := regexp.MustCompile(`(?i)Largeur de coupe\s*[:]?\s*([\d.,]+)`)
+		if m := reWC.FindStringSubmatch(block); m != nil {
+			w = strings.ReplaceAll(m[1], ",", ".")
+		}
+	}
+
 	if w != "" && h != "" {
 		// IMPORTANT: DO NOT divide by 2 here. The 'Paire' rule division 
 		// is explicitly handled in parseBlock. Doing it here causes a double-division.
@@ -982,6 +996,9 @@ func extractSize(block string) string {
 	}
 	if w != "" {
 		return w
+	}
+	if h != "" {
+		return h
 	}
 	return ""
 }
