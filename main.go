@@ -111,7 +111,6 @@ func main() {
 	fmt.Println(">> Demarrage du programme Go...")
 
 	runServer := flag.Bool("server", false, "")
-	nowait := flag.Bool("nowait", false, "")
 
 	input := flag.String("input", "", "")
 	dir := flag.String("dir", "", "")
@@ -146,79 +145,81 @@ func main() {
 		*outdir = resolveUNC(*outdir)
 	}
 
-	fmt.Printf(">> Recherche de fichiers PDF dans : %s\n", *dir)
-
-	files := collectFiles(*input, *dir, flag.Args())
-	if len(files) == 0 {
-		fmt.Println("[ERREUR] Aucun fichier PDF trouve")
-		fmt.Println("\nAppuyez sur Entree pour quitter...")
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
-		return
-	}
-
-	var allRecs []Record
-	var allStats []FileStat
-	var anyFile string
-
-	fmt.Printf(">> %d fichiers trouves. Debut de l'extraction...\n", len(files))
-
-	for _, f := range files {
-		fmt.Printf(".. Traitement de : %s...\n", filepath.Base(f))
-		if anyFile == "" {
-			anyFile = f
+	for {
+		fmt.Printf("\n>> Dossier d'entrée configuré : %s\n", *dir)
+		fmt.Println(">> Appuyez sur Entree pour traiter les fichiers (ou tapez 'q' pour quitter)...")
+		
+		userInput, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(userInput)) == "q" {
+			break
 		}
-		recs, stat := processPDF(f)
-		allRecs = append(allRecs, recs...)
-		allStats = append(allStats, stat)
-	}
 
-	// Ensure output directory exists
-	outPath := getOutputPath(*outdir, anyFile)
-	if outPath == "" {
-		outPath = "."
-	}
-	os.MkdirAll(outPath, 0755)
+		fmt.Printf(">> Recherche de fichiers PDF dans : %s\n", *dir)
 
-	if *excelFlag {
-		finalPath := filepath.Join(outPath, "output.xlsx")
-		exportExcel(allRecs, finalPath)
-	}
-	if *csvFlag {
-		exportCSV(allRecs, filepath.Join(outPath, "output.csv"))
-	}
-	if *jsonFlag {
-		exportJSON(allRecs, filepath.Join(outPath, "output.json"))
-	}
-
-	writeLogFile(filepath.Join(outPath, "extraction_log.tsv"), allStats)
-
-	// Summary stats
-	totalFiles := len(allStats)
-	totalItems := 0
-	totalOCR := 0
-	totalFailed := 0
-	for _, s := range allStats {
-		totalItems += s.Extracted
-		if s.OCR {
-			totalOCR++
+		files := collectFiles(*input, *dir, flag.Args())
+		if len(files) == 0 {
+			fmt.Println("[ERREUR] Aucun fichier PDF trouve")
+			continue
 		}
-		if s.Extracted == 0 {
-			totalFailed++
+
+		var allRecs []Record
+		var allStats []FileStat
+		var anyFile string
+
+		fmt.Printf(">> %d fichiers trouves. Debut de l'extraction...\n", len(files))
+
+		for _, f := range files {
+			fmt.Printf(".. Traitement de : %s...\n", filepath.Base(f))
+			if anyFile == "" {
+				anyFile = f
+			}
+			recs, stat := processPDF(f)
+			allRecs = append(allRecs, recs...)
+			allStats = append(allStats, stat)
 		}
-	}
 
-	fmt.Printf("\n--- STATISTIQUES FINALES ---\n")
-	fmt.Printf("Fichiers traites       : %d\n", totalFiles)
-	fmt.Printf("Items extraits         : %d\n", totalItems)
-	fmt.Printf("Conversions OCR (auto) : %d\n", totalOCR)
-	fmt.Printf("Echecs (En instance)   : %d\n", totalFailed)
-	fmt.Printf("----------------------------\n")
+		// Ensure output directory exists
+		outPath := getOutputPath(*outdir, anyFile)
+		if outPath == "" {
+			outPath = "."
+		}
+		os.MkdirAll(outPath, 0755)
 
-	fmt.Println("[OK] Termine")
+		if *excelFlag {
+			finalPath := filepath.Join(outPath, "output.xlsx")
+			exportExcel(allRecs, finalPath)
+		}
+		if *csvFlag {
+			exportCSV(allRecs, filepath.Join(outPath, "output.csv"))
+		}
+		if *jsonFlag {
+			exportJSON(allRecs, filepath.Join(outPath, "output.json"))
+		}
 
-	if !*nowait {
-		fmt.Println("\nAppuyez sur Entree pour quitter...")
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
+		writeLogFile(filepath.Join(outPath, "extraction_log.tsv"), allStats)
+
+		// Summary stats
+		totalFiles := len(allStats)
+		totalItems := 0
+		totalOCR := 0
+		totalFailed := 0
+		for _, s := range allStats {
+			totalItems += s.Extracted
+			if s.OCR {
+				totalOCR++
+			}
+			if s.Extracted == 0 {
+				totalFailed++
+			}
+		}
+
+		fmt.Printf("\n--- STATISTIQUES FINALES ---\n")
+		fmt.Printf("Fichiers traites       : %d\n", totalFiles)
+		fmt.Printf("Items extraits         : %d\n", totalItems)
+		fmt.Printf("Conversions OCR (auto) : %d\n", totalOCR)
+		fmt.Printf("Echecs (En instance)   : %d\n", totalFailed)
+		fmt.Printf("----------------------------\n")
+		fmt.Println("[OK] Traitement terminé pour ce lot.")
 	}
 }
 

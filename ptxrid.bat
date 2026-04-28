@@ -25,7 +25,7 @@ echo.
 
 color 0A
 echo [Script] Lancement de l'executable...
-"%~dp0ptxrid.exe" -dir "%INDIR%" -outdir "%OUTDIR%" -excel -nowait
+"%~dp0ptxrid.exe" -dir "%INDIR%" -outdir "%OUTDIR%" -excel
 
 color 0F
 echo.
