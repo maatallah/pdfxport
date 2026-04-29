@@ -894,13 +894,13 @@ func parseBlock(block string) []Record {
 					
 					r1 := rec
 					r1.OrderItem = fmt.Sprintf("%d/1", itemX)
-					r1.Size = fmt.Sprintf("%.1f x %s", halfW, hVal)
+					r1.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
 					
 					r2 := rec
 					r2.OrderItem = fmt.Sprintf("%d/2", itemX)
-					r2.Size = fmt.Sprintf("%.1f x %s", halfW, hVal)
+					r2.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
 					
-					logDebug("RÈGLE PAIRE APPLIQUÉE: %.1f x %s", halfW, hVal)
+					logDebug("RÈGLE PAIRE APPLIQUÉE: %s x %s", cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)), cleanDim(hVal))
 					return []Record{r1, r2}
 				}
 			}
@@ -992,15 +992,26 @@ func extractSize(block string) string {
 	if w != "" && h != "" {
 		// IMPORTANT: DO NOT divide by 2 here. The 'Paire' rule division 
 		// is explicitly handled in parseBlock. Doing it here causes a double-division.
-		return w + " x " + h
+		return cleanDim(w) + " x " + cleanDim(h)
 	}
 	if w != "" {
-		return w
+		return cleanDim(w)
 	}
 	if h != "" {
-		return h
+		return cleanDim(h)
 	}
 	return ""
+}
+
+// Helper to remove trailing .0 from dimensions
+func cleanDim(s string) string {
+	s = strings.ReplaceAll(s, ",", ".")
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return s
+	}
+	// 'f' with -1 precision automatically removes unnecessary trailing zeros
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // -----------------------------
