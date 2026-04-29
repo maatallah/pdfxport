@@ -171,10 +171,30 @@ func main() {
 
 		for _, f := range files {
 			fmt.Printf(".. Traitement de : %s...\n", filepath.Base(f))
-			if anyFile == "" {
-				anyFile = f
-			}
 			recs, stat := processPDF(f)
+			
+			// AUTO-RENAME: If file is named Commandes_timestamp.pdf, rename it to OrderNumber.pdf
+			activeFile := f
+			if len(recs) > 0 && strings.HasPrefix(filepath.Base(f), "Commandes_") {
+				orderNo := recs[0].OrderNumber
+				if orderNo != "" {
+					// Clean order number for filename (remove dots if desired, but user likes 60CW.00058.pdf)
+					newName := orderNo + ".pdf"
+					newPath := filepath.Join(filepath.Dir(f), newName)
+					
+					// Avoid collision
+					if _, err := os.Stat(newPath); os.IsNotExist(err) {
+						if err := os.Rename(f, newPath); err == nil {
+							fmt.Printf("   [INFO] Renomme en : %s\n", newName)
+							activeFile = newPath
+						}
+					}
+				}
+			}
+
+			if anyFile == "" {
+				anyFile = activeFile
+			}
 			allRecs = append(allRecs, recs...)
 			allStats = append(allStats, stat)
 		}
