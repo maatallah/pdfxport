@@ -90,7 +90,7 @@ func startServer() {
 			return
 		}
 
-		fmt.Printf("\n[SERVEUR] 🚀 Fichier reçu et enregistré avec succès : in\\%s\n", filename)
+		fmt.Printf("\n[SERVEUR] Fichier reçu et enregistré avec succès : in\\%s\n", filename)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Success"))
 	})
@@ -1062,6 +1062,18 @@ func exportExcel(r []Record, f string) {
 		bufio.NewReader(os.Stdin).ReadBytes('\n')
 	} else {
 		fmt.Printf("[OK] %d lignes ecrites avec succes dans Excel !\n", len(r))
+
+		// ARCHIVE: Create a timestamped copy in an 'archive' subfolder
+		dir := filepath.Dir(f)
+		archiveDir := filepath.Join(dir, "archive")
+		os.MkdirAll(archiveDir, 0755)
+
+		timestamp := time.Now().Format("20060102_150405")
+		archivePath := filepath.Join(archiveDir, fmt.Sprintf("output_%s.xlsx", timestamp))
+		
+		if err := ex.SaveAs(archivePath); err == nil {
+			fmt.Printf("[ARCHIVE] Copie sauvegardee : %s\n", filepath.Base(archivePath))
+		}
 	}
 }
 
