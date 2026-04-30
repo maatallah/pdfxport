@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Decoloop Auto-Downloader",
+  "version": "1.1",
+  "description": "Intercepts Decoloop PDF generation and pushes to local Go server.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.decoloop.com/*",
+    "http://localhost/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.decoloop.com/*"
+      ],
+      "js": [
+        "content_good.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
