@@ -173,27 +173,8 @@ func main() {
 			fmt.Printf(".. Traitement de : %s...\n", filepath.Base(f))
 			recs, stat := processPDF(f)
 			
-			// AUTO-RENAME: If file is named Commandes_timestamp.pdf, rename it to OrderNumber.pdf
-			activeFile := f
-			if len(recs) > 0 && strings.HasPrefix(filepath.Base(f), "Commandes_") {
-				orderNo := recs[0].OrderNumber
-				if orderNo != "" {
-					// Clean order number for filename (remove dots if desired, but user likes 60CW.00058.pdf)
-					newName := orderNo + ".pdf"
-					newPath := filepath.Join(filepath.Dir(f), newName)
-					
-					// Avoid collision
-					if _, err := os.Stat(newPath); os.IsNotExist(err) {
-						if err := os.Rename(f, newPath); err == nil {
-							fmt.Printf("   [INFO] Renomme en : %s\n", newName)
-							activeFile = newPath
-						}
-					}
-				}
-			}
-
 			if anyFile == "" {
-				anyFile = activeFile
+				anyFile = f
 			}
 			allRecs = append(allRecs, recs...)
 			allStats = append(allStats, stat)
@@ -379,7 +360,11 @@ func processPDF(path string) ([]Record, FileStat) {
 
 	// 5. ARCHIVE SUCCESSFUL FILES
 	if stat.Extracted > 0 {
-		moveToProcessed(path)
+		newBase := ""
+		if strings.HasPrefix(base, "Commandes_") && len(recs) > 0 && recs[0].OrderNumber != "" {
+			newBase = recs[0].OrderNumber + ".pdf"
+		}
+		moveToProcessed(path, newBase)
 		stat.Moved = "P"
 	}
 
@@ -412,13 +397,16 @@ func performOCR(path string) error {
 	return nil
 }
 
-func moveToProcessed(path string) {
+func moveToProcessed(path string, newBase string) {
 	dir := filepath.Dir(path)
 	base := filepath.Base(path)
+	if newBase == "" {
+		newBase = base
+	}
 	doneDir := filepath.Join(dir, "processed")
 	os.MkdirAll(doneDir, 0755)
 
-	dest := filepath.Join(doneDir, base)
+	dest := filepath.Join(doneDir, newBase)
 	// On Windows, os.Rename fails if destination exists
 	os.Remove(dest)
 
@@ -430,7 +418,7 @@ func moveToProcessed(path string) {
 			os.Remove(path)
 		}
 	}
-	fmt.Printf("   [DONE] %s archive vers 'processed'\n", base)
+	fmt.Printf("   [DONE] %s archive vers 'processed'\n", newBase)
 }
 
 // -----------------------------
