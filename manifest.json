@@ -16,7 +16,7 @@
         "*://*.decoloop.com/*"
       ],
       "js": [
-        "content_good.js"
+        "content.js"
       ],
       "run_at": "document_start"
     }
