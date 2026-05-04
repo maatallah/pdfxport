@@ -21,15 +21,14 @@
         }
     }
 
-    // Helper to send logs quietly to the Go server (uses native fetch, bypasses our hook)
+    // Helper to send logs quietly to the Go server (uses sendBeacon for reliability)
     function remoteLog(message) {
-        _nativeFetch('http://localhost:8765/log', {
-            method: 'POST',
-            body: message
-        }).catch(e => {}); // Ignore errors so we don't spam the console if server is down
+        const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const fullMsg = `[${timestamp}] ${message}`;
+        navigator.sendBeacon('http://localhost:8765/log', fullMsg);
     }
 
-    remoteLog('[INIT] CPT Decoloop Interceptor loaded on ' + window.location.href);
+    remoteLog('[INIT] CPT Decoloop Interceptor (MAIN WORLD) loaded on ' + window.location.href);
 
     // --- GLOBAL ERROR CATCHERS ---
     window.addEventListener('error', function(e) {
@@ -52,56 +51,46 @@
         }
     });
 
-    // 1. Hook XMLHttpRequest (Legacy)
+    // --- XHR HOOK (REWRITTEN FOR STABILITY) ---
     const oldOpen = XMLHttpRequest.prototype.open;
+    const oldSend = XMLHttpRequest.prototype.send;
+
     XMLHttpRequest.prototype.open = function(method, url) {
+        this._method = method;
+        this._url = url;
+        return oldOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function() {
+        const url = this._url || "";
+        const method = this._method || "POST";
+
+        // If we suspect this is the PDF, force it to be a Blob before it's sent
+        if (url.toLowerCase().includes('generatepdfdocument')) {
+            remoteLog(`[DEBUG] Forcing responseType='blob' for PDF request: ${url}`);
+            this.responseType = 'blob';
+        }
+
         this.addEventListener('load', function() {
             try {
                 const ct = this.getResponseHeader('Content-Type') || "";
                 const status = this.status;
-                const resUrl = this.responseURL || url || "";
-                
-                // Log the network request
                 remoteLog(`[XHR] ${method} ${url} - Status: ${status} CT: ${ct}`);
 
-                // Breadcrumb 1: Check conditions
-                const isPdfCT = ct.toLowerCase().includes('application/pdf');
-                const isPdfUrl = resUrl.toLowerCase().includes('generatepdfdocument');
-
-                if (isPdfCT || isPdfUrl) {
-                    remoteLog(`[DEBUG] Step 1: PDF Condition met (CT: ${isPdfCT}, URL: ${isPdfUrl})`);
-                    remoteLog(`🚀 PDF Detected via XHR! (URL: ${resUrl})`);
-                    
-                    // Breadcrumb 2: Check response type/data
-                    remoteLog(`[DEBUG] Step 2: Checking response data...`);
-                    let blob = null;
-                    if (this.response instanceof Blob) {
-                        remoteLog(`[DEBUG] Step 3: Response is already a Blob (${this.response.size} bytes)`);
-                        blob = this.response;
-                    } else if (this.response instanceof ArrayBuffer) {
-                        remoteLog(`[DEBUG] Step 3: Response is ArrayBuffer, converting...`);
-                        blob = new Blob([this.response], {type: 'application/pdf'});
+                if (ct.toLowerCase().includes('application/pdf') || url.toLowerCase().includes('generatepdfdocument')) {
+                    remoteLog(`🚀 PDF Detected! Size: ${this.response ? this.response.size : 'NULL'} bytes`);
+                    if (this.response instanceof Blob && this.response.size > 0) {
+                        sendToProcessor(this.response);
                     } else {
-                        remoteLog(`[DEBUG] Step 3: Response is unknown type (${typeof this.response}), attempting conversion...`);
-                        try {
-                            blob = new Blob([this.response], {type: 'application/pdf'});
-                        } catch (e) {
-                            remoteLog(`[ERROR] Failed to create blob: ${e.message}`);
-                        }
-                    }
-                    
-                    if (blob && blob.size > 0) {
-                        remoteLog(`[DEBUG] Step 4: Final Blob ready (${blob.size} bytes). Sending to processor...`);
-                        sendToProcessor(blob);
-                    } else {
-                        remoteLog("[WARNING] Step 4: Resulting Blob is empty or invalid.");
+                        remoteLog(`[WARNING] Response was not a valid Blob. Type: ${typeof this.response}`);
                     }
                 }
             } catch (err) {
-                remoteLog(`[CRASH] Error in XHR Load Listener: ${err.message}\nStack: ${err.stack}`);
+                remoteLog(`[CRASH] XHR Load: ${err.message}`);
             }
         });
-        return oldOpen.apply(this, arguments);
+
+        return oldSend.apply(this, arguments);
     };
 
     // 2. Hook Fetch (Modern)
