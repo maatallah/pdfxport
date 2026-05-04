@@ -62,27 +62,36 @@
     };
 
     XMLHttpRequest.prototype.send = function() {
-        const url = this._url || "";
+        const args = arguments;
+        const url = this._url || "UNKNOWN";
         const method = this._method || "POST";
 
-        // If we suspect this is the PDF, force it to be a Blob before it's sent
+        // Log EVERY send so we can see the URLs clearly
+        remoteLog(`[SENDING] ${method} ${url}`);
+
         if (url.toLowerCase().includes('generatepdfdocument')) {
-            remoteLog(`[DEBUG] Forcing responseType='blob' for PDF request: ${url}`);
-            this.responseType = 'blob';
+            remoteLog(`[DEBUG] TARGET DETECTED. Forcing responseType='blob' for: ${url}`);
+            try {
+                this.responseType = 'blob';
+            } catch (e) {
+                remoteLog(`[ERROR] Could not set responseType: ${e.message}`);
+            }
         }
 
         this.addEventListener('load', function() {
             try {
                 const ct = this.getResponseHeader('Content-Type') || "";
                 const status = this.status;
-                remoteLog(`[XHR] ${method} ${url} - Status: ${status} CT: ${ct}`);
+                const rType = this.responseType;
+                
+                remoteLog(`[XHR LOAD] ${method} ${url} - Status: ${status} CT: ${ct} Type: ${rType}`);
 
                 if (ct.toLowerCase().includes('application/pdf') || url.toLowerCase().includes('generatepdfdocument')) {
-                    remoteLog(`🚀 PDF Detected! Size: ${this.response ? this.response.size : 'NULL'} bytes`);
-                    if (this.response instanceof Blob && this.response.size > 0) {
+                    remoteLog(`🚀 PDF Detected! Size: ${this.response ? (this.response.size || 'N/A') : 'NULL'} bytes`);
+                    if (this.response instanceof Blob) {
                         sendToProcessor(this.response);
                     } else {
-                        remoteLog(`[WARNING] Response was not a valid Blob. Type: ${typeof this.response}`);
+                        remoteLog(`[WARNING] Response is NOT a Blob. It is: ${typeof this.response}`);
                     }
                 }
             } catch (err) {
@@ -90,7 +99,7 @@
             }
         });
 
-        return oldSend.apply(this, arguments);
+        return oldSend.apply(this, args);
     };
 
     // 2. Hook Fetch (Modern)
