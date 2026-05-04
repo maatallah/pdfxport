@@ -880,17 +880,29 @@ func parseBlock(block string) []Record {
 		return results
 	}
 
-	// Regex to check if values are > 0 (Permissive for newlines and Dutch)
-	reLeftVal := regexp.MustCompile(`(?is)(?:gauche|links)[\r\n\s\.:\-_]*([1-9]\d*)`)
-	reRightVal := regexp.MustCompile(`(?is)(?:droite|rechts)[\r\n\s\.:\-_]*([1-9]\d*)`)
-	isLeftPos := reLeftVal.MatchString(norm)
-	isRightPos := reRightVal.MatchString(norm)
+	// Regex to check for paired curtains (The "Paire" rule)
+	// We specifically look for "À gauche" and "À droite" to avoid mixing with "Lés G/D"
+	// We allow decimals (like 0.5) and check if the value is > 0
+	reNum := `([0-9]+[.,]?[0-9]*)`
+	reLeft := regexp.MustCompile(`(?is)À?\s*(?:gauche|links)[\r\n\s\.:\-_]*` + reNum)
+	reRight := regexp.MustCompile(`(?is)À?\s*(?:droite|rechts)[\r\n\s\.:\-_]*` + reNum)
+	
+	mLeft := reLeft.FindStringSubmatch(norm)
+	mRight := reRight.FindStringSubmatch(norm)
+	
+	isPaire := false
+	if mLeft != nil && mRight != nil {
+		vL, _ := strconv.ParseFloat(strings.ReplaceAll(mLeft[1], ",", "."), 64)
+		vR, _ := strconv.ParseFloat(strings.ReplaceAll(mRight[1], ",", "."), 64)
+		if vL > 0 && vR > 0 {
+			isPaire = true
+		}
+	}
 
-	// CASE A: Gauche/Droite values found (The "Paire" rule)
-	if isLeftPos && isRightPos && hStr != "" {
+	if isPaire && hStr != "" {
 		sz := extractSize(norm)
 		if sz != "" {
-			// Clean "cm" or other junk from the size string before math
+			// Clean "cm" or other junk
 			sz = regexp.MustCompile(`(?i)\s*cm`).ReplaceAllString(sz, "")
 			parts := strings.Split(sz, " x ")
 			if len(parts) == 2 {
@@ -909,7 +921,7 @@ func parseBlock(block string) []Record {
 					r2.OrderItem = fmt.Sprintf("%d/2", itemX)
 					r2.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
 					
-					logDebug("RÈGLE PAIRE APPLIQUÉE: %s x %s", cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)), cleanDim(hVal))
+					logDebug("RÈGLE PAIRE APPLIQUÉE (Détecté: %s/%s): %s x %s", mLeft[1], mRight[1], cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)), cleanDim(hVal))
 					return []Record{r1, r2}
 				}
 			}
@@ -933,15 +945,32 @@ func parseBlock(block string) []Record {
 func extractSize(block string) string {
 	h, w := "", ""
 
-	// 1. Strict Label-based search (Requires colon - ignores stray "Largeur 235" junk)
-	reHStrict := regexp.MustCompile(`(?i)(?:Hauteu[r]?|Hoogte|Height)\s*:\s*([\d.,]+)`)
-	reWStrict := regexp.MustCompile(`(?i)(?:Largeu[r]?|Breedte|Width)\s*:\s*([\d.,]+)`)
+	// 0. Super-Strict pass: Require "cm" anchor (Best way to avoid ghost numbers like 0.5 / 0.75)
+	reHUnit := regexp.MustCompile(`(?i)(?:Hauteu[r]?|Hoogte|Height)\s*:\s*([\d.,]+)\s*cm`)
+	reWUnit := regexp.MustCompile(`(?i)(?:Largeu[r]?|Breedte|Width)\s*:\s*([\d.,]+)\s*cm`)
 
-	if m := reHStrict.FindStringSubmatch(block); m != nil {
+	if m := reHUnit.FindStringSubmatch(block); m != nil {
 		h = strings.ReplaceAll(m[1], ",", ".")
 	}
-	if m := reWStrict.FindStringSubmatch(block); m != nil {
+	if m := reWUnit.FindStringSubmatch(block); m != nil {
 		w = strings.ReplaceAll(m[1], ",", ".")
+	}
+
+	// 1. Strict pass: No "cm" required but colon is (Fallback if "cm" is missing)
+	if h == "" || w == "" {
+		reHStrict := regexp.MustCompile(`(?i)(?:Hauteu[r]?|Hoogte|Height)\s*:\s*([\d.,]+)`)
+		reWStrict := regexp.MustCompile(`(?i)(?:Largeu[r]?|Breedte|Width)\s*:\s*([\d.,]+)`)
+
+		if h == "" {
+			if m := reHStrict.FindStringSubmatch(block); m != nil {
+				h = strings.ReplaceAll(m[1], ",", ".")
+			}
+		}
+		if w == "" {
+			if m := reWStrict.FindStringSubmatch(block); m != nil {
+				w = strings.ReplaceAll(m[1], ",", ".")
+			}
+		}
 	}
 
 	// 2. Permissive Label-based search (Fallback if OCR lost the colon)
