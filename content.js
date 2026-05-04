@@ -1,5 +1,5 @@
 (function() {
-    console.log(">> CPT DECOLOOP INTERCEPTOR v1.6 ACTIVE <<");
+    console.log(">> CPT DECOLOOP INTERCEPTOR v1.7 ACTIVE <<");
     const _nativeFetch = window.fetch.bind(window);
 
     // Helper to send PDF to the Go server (uses native fetch, bypasses our hook)
@@ -24,7 +24,7 @@
         navigator.sendBeacon('http://localhost:8765/log', fullMsg);
     }
 
-    remoteLog('[INIT] v1.6 (Total Suppression) loaded on ' + window.location.href);
+    remoteLog('[INIT] v1.7 (Total Suppression) loaded on ' + window.location.href);
 
     // --- GREEDY PDF EXTRACTION & SUPPRESSION ---
     let lastInterceptTime = 0;
@@ -43,7 +43,17 @@
         return oldWindowOpen.apply(this, arguments);
     };
 
-    // 2. Block iFrame PDF loading (Common for print previews)
+    // 2. Block window.print (The final piece!)
+    const oldWindowPrint = window.print;
+    window.print = function() {
+        if (isRecentlyIntercepted()) {
+            remoteLog("[OK] Suppressing window.print() dialog");
+            return;
+        }
+        return oldWindowPrint.apply(this, arguments);
+    };
+
+    // 3. Block iFrame PDF loading (Common for print previews)
     const iframeSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
     Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
         set: function(val) {
