@@ -6,14 +6,18 @@
     // Helper to send PDF to the Go server (uses native fetch, bypasses our hook)
     async function sendToProcessor(blob) {
         try {
-            console.log("[Extension] Pushing PDF to local server...");
-            await _nativeFetch('http://localhost:8765/upload', {
+            remoteLog(`[DEBUG] Attempting to push PDF to Go server (${blob.size} bytes)...`);
+            const res = await _nativeFetch('http://localhost:8765/upload', {
                 method: 'POST',
                 body: blob
             });
-            console.log("[OK] PDF pushed to Go Server successfully!");
+            if (res.ok) {
+                remoteLog("[OK] PDF pushed to Go Server successfully!");
+            } else {
+                remoteLog(`[ERROR] Go Server returned status: ${res.status}`);
+            }
         } catch (err) {
-            console.error("[ERROR] Failed to talk to Go Server. Is it running on port 8765?", err);
+            remoteLog(`[ERROR] Failed to talk to Go Server: ${err.message}`);
         }
     }
 
@@ -62,20 +66,27 @@
             // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
             const resUrl = this.responseURL || url || "";
             if ((ct && ct.includes('application/pdf')) || resUrl.includes('generatePdfDocument')) {
-                console.log(`🚀 PDF Detected via XHR (URL: ${resUrl}, CT: ${ct})`);
+                remoteLog(`🚀 PDF Detected via XHR! (URL: ${resUrl}, CT: ${ct})`);
                 
                 let blob = null;
-                if (this.responseType === 'blob') {
+                if (this.response instanceof Blob) {
                     blob = this.response;
-                } else if (this.responseType === 'arraybuffer') {
+                } else if (this.response instanceof ArrayBuffer) {
                     blob = new Blob([this.response], {type: 'application/pdf'});
                 } else {
-                    // Fallback if responseType wasn't set correctly
-                    blob = new Blob([this.response], {type: 'application/pdf'});
+                    // If it's a string or unknown, we try to capture it as a blob
+                    // Note: This is a last resort as binary strings can be tricky
+                    try {
+                        blob = new Blob([this.response], {type: 'application/pdf'});
+                    } catch (e) {
+                        remoteLog(`[ERROR] Failed to create blob from XHR response: ${e.message}`);
+                    }
                 }
                 
-                if (blob) {
+                if (blob && blob.size > 0) {
                     sendToProcessor(blob);
+                } else {
+                    remoteLog("[WARNING] Captured XHR response was empty or invalid.");
                 }
             }
         });
@@ -110,14 +121,19 @@
             // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
             const resUrl = response.url || reqUrl || "";
             if ((ct && ct.includes('application/pdf')) || resUrl.includes('generatePdfDocument')) {
-                console.log(`🚀 PDF Detected via FETCH (URL: ${resUrl}, CT: ${ct})`);
+                remoteLog(`🚀 PDF Detected via FETCH! (URL: ${resUrl}, CT: ${ct})`);
                 
                 // Clone the response so the website can still use it
                 const clone = response.clone();
-                const blob = await clone.blob();
-                
-                if (blob) {
-                    sendToProcessor(blob);
+                try {
+                    const blob = await clone.blob();
+                    if (blob && blob.size > 0) {
+                        sendToProcessor(blob);
+                    } else {
+                        remoteLog("[WARNING] Captured FETCH response was empty.");
+                    }
+                } catch (e) {
+                    remoteLog(`[ERROR] Failed to extract blob from FETCH: ${e.message}`);
                 }
             }
             return response;
