@@ -1,11 +1,13 @@
 (function() {
     console.log(">> CPT DECOLOOP INTERCEPTOR ACTIVE <<");
+    // Save the NATIVE fetch before we hook anything (prevents recursive loops)
+    const _nativeFetch = window.fetch.bind(window);
 
-    // Helper to send PDF to the Go server
+    // Helper to send PDF to the Go server (uses native fetch, bypasses our hook)
     async function sendToProcessor(blob) {
         try {
             console.log("[Extension] Pushing PDF to local server...");
-            await fetch('http://localhost:8765/upload', {
+            await _nativeFetch('http://localhost:8765/upload', {
                 method: 'POST',
                 body: blob
             });
@@ -15,13 +17,15 @@
         }
     }
 
-    // Helper to send logs quietly to the Go server
+    // Helper to send logs quietly to the Go server (uses native fetch, bypasses our hook)
     function remoteLog(message) {
-        fetch('http://localhost:8765/log', {
+        _nativeFetch('http://localhost:8765/log', {
             method: 'POST',
             body: message
         }).catch(e => {}); // Ignore errors so we don't spam the console if server is down
     }
+
+    remoteLog('[INIT] CPT Decoloop Interceptor loaded on ' + window.location.href);
 
     // --- GLOBAL ERROR CATCHERS ---
     window.addEventListener('error', function(e) {
@@ -97,8 +101,10 @@
             const ct = response.headers.get('Content-Type');
             const status = response.status;
             
-            // Log the network request
-            remoteLog(`[FETCH] ${reqMethod} ${reqUrl} - Status: ${status} CT: ${ct}`);
+            // Skip logging our own requests to localhost to avoid noise
+            if (!reqUrl.includes('localhost:8765')) {
+                remoteLog(`[FETCH] ${reqMethod} ${reqUrl} - Status: ${status} CT: ${ct}`);
+            }
             
             // GUESS: If Content-Type is PDF, we grab it regardless of URL
             // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
