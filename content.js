@@ -21,8 +21,10 @@
         this.addEventListener('load', function() {
             const ct = this.getResponseHeader('Content-Type');
             // GUESS: If Content-Type is PDF, we grab it regardless of URL
-            if (ct && ct.includes('application/pdf')) {
-                console.log("🚀 PDF Detected via XHR (Content-Type Match)");
+            // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
+            const url = this.responseURL || "";
+            if ((ct && ct.includes('application/pdf')) || url.includes('generatePdfDocument')) {
+                console.log(`🚀 PDF Detected via XHR (URL: ${url}, CT: ${ct})`);
                 
                 let blob = null;
                 if (this.responseType === 'blob') {
@@ -49,8 +51,10 @@
         const ct = response.headers.get('Content-Type');
         
         // GUESS: If Content-Type is PDF, we grab it regardless of URL
-        if (ct && ct.includes('application/pdf')) {
-            console.log("🚀 PDF Detected via FETCH (Content-Type Match)");
+        // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
+        const url = response.url || "";
+        if ((ct && ct.includes('application/pdf')) || url.includes('generatePdfDocument')) {
+            console.log(`🚀 PDF Detected via FETCH (URL: ${url}, CT: ${ct})`);
             
             // Clone the response so the website can still use it
             const clone = response.clone();
