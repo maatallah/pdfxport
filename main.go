@@ -96,6 +96,32 @@ func startServer() {
 		w.Write([]byte("Success"))
 	})
 
+	http.HandleFunc("/log", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Private-Network", "true")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method == "POST" {
+			body, err := io.ReadAll(r.Body)
+			if err == nil && len(body) > 0 {
+				logPath := filepath.Join(filepath.Dir(os.Args[0]), "browser_debug.log")
+				f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err == nil {
+					timestamp := time.Now().Format("2006-01-02 15:04:05")
+					f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, string(body)))
+					f.Close()
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+
 	fmt.Println("[SERVEUR] En écoute sur localhost:8765 (Sécurisé - Prêt pour l'extension Chrome)...")
 	// Listen ONLY on localhost (127.0.0.1) so no external machines can hit this port
 	err := http.ListenAndServe("127.0.0.1:8765", nil)
