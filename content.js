@@ -56,38 +56,49 @@
     const oldOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url) {
         this.addEventListener('load', function() {
-            const ct = this.getResponseHeader('Content-Type');
-            const status = this.status;
-            
-            // Log the network request
-            remoteLog(`[XHR] ${method} ${url} - Status: ${status} CT: ${ct}`);
-
-            // GUESS: If Content-Type is PDF, we grab it regardless of URL
-            // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
-            const resUrl = this.responseURL || url || "";
-            if ((ct && ct.includes('application/pdf')) || resUrl.includes('generatePdfDocument')) {
-                remoteLog(`🚀 PDF Detected via XHR! (URL: ${resUrl}, CT: ${ct})`);
+            try {
+                const ct = this.getResponseHeader('Content-Type') || "";
+                const status = this.status;
+                const resUrl = this.responseURL || url || "";
                 
-                let blob = null;
-                if (this.response instanceof Blob) {
-                    blob = this.response;
-                } else if (this.response instanceof ArrayBuffer) {
-                    blob = new Blob([this.response], {type: 'application/pdf'});
-                } else {
-                    // If it's a string or unknown, we try to capture it as a blob
-                    // Note: This is a last resort as binary strings can be tricky
-                    try {
+                // Log the network request
+                remoteLog(`[XHR] ${method} ${url} - Status: ${status} CT: ${ct}`);
+
+                // Breadcrumb 1: Check conditions
+                const isPdfCT = ct.toLowerCase().includes('application/pdf');
+                const isPdfUrl = resUrl.toLowerCase().includes('generatepdfdocument');
+
+                if (isPdfCT || isPdfUrl) {
+                    remoteLog(`[DEBUG] Step 1: PDF Condition met (CT: ${isPdfCT}, URL: ${isPdfUrl})`);
+                    remoteLog(`🚀 PDF Detected via XHR! (URL: ${resUrl})`);
+                    
+                    // Breadcrumb 2: Check response type/data
+                    remoteLog(`[DEBUG] Step 2: Checking response data...`);
+                    let blob = null;
+                    if (this.response instanceof Blob) {
+                        remoteLog(`[DEBUG] Step 3: Response is already a Blob (${this.response.size} bytes)`);
+                        blob = this.response;
+                    } else if (this.response instanceof ArrayBuffer) {
+                        remoteLog(`[DEBUG] Step 3: Response is ArrayBuffer, converting...`);
                         blob = new Blob([this.response], {type: 'application/pdf'});
-                    } catch (e) {
-                        remoteLog(`[ERROR] Failed to create blob from XHR response: ${e.message}`);
+                    } else {
+                        remoteLog(`[DEBUG] Step 3: Response is unknown type (${typeof this.response}), attempting conversion...`);
+                        try {
+                            blob = new Blob([this.response], {type: 'application/pdf'});
+                        } catch (e) {
+                            remoteLog(`[ERROR] Failed to create blob: ${e.message}`);
+                        }
+                    }
+                    
+                    if (blob && blob.size > 0) {
+                        remoteLog(`[DEBUG] Step 4: Final Blob ready (${blob.size} bytes). Sending to processor...`);
+                        sendToProcessor(blob);
+                    } else {
+                        remoteLog("[WARNING] Step 4: Resulting Blob is empty or invalid.");
                     }
                 }
-                
-                if (blob && blob.size > 0) {
-                    sendToProcessor(blob);
-                } else {
-                    remoteLog("[WARNING] Captured XHR response was empty or invalid.");
-                }
+            } catch (err) {
+                remoteLog(`[CRASH] Error in XHR Load Listener: ${err.message}\nStack: ${err.stack}`);
             }
         });
         return oldOpen.apply(this, arguments);
