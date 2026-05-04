@@ -61,37 +61,50 @@
         return oldOpen.apply(this, arguments);
     };
 
+    // --- GREEDY PDF EXTRACTION ---
+    let lastInterceptTime = 0;
+
+    // Hook createObjectURL to catch when the site tries to preview a blob
+    const oldCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = function(obj) {
+        const url = oldCreateObjectURL.apply(this, arguments);
+        if (obj instanceof Blob && obj.type === 'application/pdf') {
+            remoteLog(`[DEBUG] Website created PDF Blob URL: ${url}`);
+        }
+        return url;
+    };
+
+    // Hook window.open to suppress the preview window
+    const oldWindowOpen = window.open;
+    window.open = function(url) {
+        const now = Date.now();
+        // If we recently intercepted a PDF, block window.open for 2 seconds
+        if (now - lastInterceptTime < 2000) {
+            remoteLog("[OK] Suppressing Print Preview window.open()");
+            return null; 
+        }
+        return oldWindowOpen.apply(this, arguments);
+    };
+
     XMLHttpRequest.prototype.send = function() {
         const args = arguments;
         const url = this._url || "UNKNOWN";
         const method = this._method || "POST";
 
-        // Log EVERY send so we can see the URLs clearly
-        remoteLog(`[SENDING] ${method} ${url}`);
-
         if (url.toLowerCase().includes('generatepdfdocument')) {
-            remoteLog(`[DEBUG] TARGET DETECTED. Forcing responseType='blob' for: ${url}`);
-            try {
-                this.responseType = 'blob';
-            } catch (e) {
-                remoteLog(`[ERROR] Could not set responseType: ${e.message}`);
-            }
+            remoteLog(`[DEBUG] Forcing responseType='blob' for: ${url}`);
+            this.responseType = 'blob';
         }
 
         this.addEventListener('load', function() {
             try {
                 const ct = this.getResponseHeader('Content-Type') || "";
-                const status = this.status;
-                const rType = this.responseType;
-                
-                remoteLog(`[XHR LOAD] ${method} ${url} - Status: ${status} CT: ${ct} Type: ${rType}`);
-
                 if (ct.toLowerCase().includes('application/pdf') || url.toLowerCase().includes('generatepdfdocument')) {
-                    remoteLog(`🚀 PDF Detected! Size: ${this.response ? (this.response.size || 'N/A') : 'NULL'} bytes`);
-                    if (this.response instanceof Blob) {
+                    const size = this.response ? (this.response.size || 0) : 0;
+                    remoteLog(`🚀 PDF Detected! Size: ${size} bytes`);
+                    if (this.response instanceof Blob && size > 0) {
+                        lastInterceptTime = Date.now(); // Mark time to block window.open
                         sendToProcessor(this.response);
-                    } else {
-                        remoteLog(`[WARNING] Response is NOT a Blob. It is: ${typeof this.response}`);
                     }
                 }
             } catch (err) {
@@ -105,49 +118,31 @@
     // 2. Hook Fetch (Modern)
     const oldFetch = window.fetch;
     window.fetch = async function(...args) {
-        let reqMethod = "GET";
-        let reqUrl = "";
+        let reqUrl = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : "");
         
-        if (typeof args[0] === 'string') {
-            reqUrl = args[0];
-            if (args[1] && args[1].method) reqMethod = args[1].method;
-        } else if (args[0] && args[0].url) {
-            reqUrl = args[0].url;
-            reqMethod = args[0].method || "GET";
-        }
-
         try {
             const response = await oldFetch.apply(this, args);
-            const ct = response.headers.get('Content-Type');
-            const status = response.status;
+            const ct = response.headers.get('Content-Type') || "";
             
-            // Skip logging our own requests to localhost to avoid noise
-            if (!reqUrl.includes('localhost:8765')) {
-                remoteLog(`[FETCH] ${reqMethod} ${reqUrl} - Status: ${status} CT: ${ct}`);
-            }
-            
-            // GUESS: If Content-Type is PDF, we grab it regardless of URL
-            // FALLBACK: If URL contains generatePdfDocument, grab it even if Content-Type is wrong
-            const resUrl = response.url || reqUrl || "";
-            if ((ct && ct.includes('application/pdf')) || resUrl.includes('generatePdfDocument')) {
-                remoteLog(`🚀 PDF Detected via FETCH! (URL: ${resUrl}, CT: ${ct})`);
+            if (ct.toLowerCase().includes('application/pdf') || reqUrl.toLowerCase().includes('generatepdfdocument')) {
+                remoteLog(`🚀 PDF Detected via FETCH! (URL: ${reqUrl})`);
                 
-                // Clone the response so the website can still use it
-                const clone = response.clone();
+                // NO CLONE: We consume the body so the website can't use it for a preview
                 try {
-                    const blob = await clone.blob();
+                    const blob = await response.blob();
                     if (blob && blob.size > 0) {
+                        lastInterceptTime = Date.now();
                         sendToProcessor(blob);
-                    } else {
-                        remoteLog("[WARNING] Captured FETCH response was empty.");
                     }
                 } catch (e) {
-                    remoteLog(`[ERROR] Failed to extract blob from FETCH: ${e.message}`);
+                    remoteLog(`[ERROR] Fetch body already consumed or failed: ${e.message}`);
                 }
             }
             return response;
         } catch (error) {
-            remoteLog(`[FETCH ERROR] ${reqMethod} ${reqUrl} - ${error.message}`);
+            if (!reqUrl.includes('localhost:8765')) {
+                remoteLog(`[FETCH ERROR] ${reqUrl} - ${error.message}`);
+            }
             throw error;
         }
     };
