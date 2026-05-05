@@ -1,26 +1,39 @@
 {
   "manifest_version": 3,
-  "name": "Decoloop Auto-Downloader",
-  "version": "1.1",
-  "description": "Intercepts Decoloop PDF generation and pushes to local Go server.",
+  "name": "PDF Interceptor Pro",
+  "version": "3.0",
   "permissions": [
-    "storage"
+    "scripting"
   ],
   "host_permissions": [
-    "*://*.decoloop.com/*",
-    "http://localhost/*"
+    "https://app.decoloop.com/*",
+    "https://sievalhub.sieval.com/*",
+    "http://localhost:8080/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": [
-        "*://*.decoloop.com/*",
-        "*://*.sieval.com/*"
+        "https://app.decoloop.com/*"
       ],
       "js": [
-        "content.js"
+        "content_main.js"
       ],
-      "run_at": "document_start",
-      "world": "MAIN"
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "inject_xhr.js",
+        "inject_fetch.js",
+        "inject_blob.js"
+      ],
+      "matches": [
+        "https://app.decoloop.com/*"
+      ]
     }
   ]
 }
