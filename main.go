@@ -55,7 +55,6 @@ func logDebug(format string, a ...interface{}) {
 // startServer launches a background HTTP server to receive PDFs directly from the Chrome Extension
 func startServer() {
 	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
-		// Allow the Chrome Extension to talk to us
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -71,31 +70,34 @@ func startServer() {
 			return
 		}
 
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failed to read body", http.StatusInternalServerError)
-			return
-		}
-
-		// Save the file to the 'in/' folder
+		// Ensure directory exists
 		inDir := filepath.Join(filepath.Dir(os.Args[0]), "in")
-		os.MkdirAll(inDir, 0755) // Ensure directory exists
+		os.MkdirAll(inDir, 0755)
 
-		filename := fmt.Sprintf("Commandes_%d.pdf", time.Now().Unix())
+		// 🔴 UNIQUE filename (nanoseconds)
+		filename := fmt.Sprintf("Commandes_%d.pdf", time.Now().UnixNano())
 		outPath := filepath.Join(inDir, filename)
 
-		err = os.WriteFile(outPath, body, 0644)
+		// 🔴 STREAM directly to file (no buffering)
+		file, err := os.Create(outPath)
 		if err != nil {
-			fmt.Printf("\n[ERREUR SERVEUR] Impossible d'enregistrer %s: %v\n", filename, err)
+			http.Error(w, "Failed to create file", http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		_, err = io.Copy(file, r.Body)
+		if err != nil {
 			http.Error(w, "Failed to save file", http.StatusInternalServerError)
 			return
 		}
 
-		fmt.Printf("\n[SERVEUR] Fichier reçu et enregistré avec succès : in\\%s\n", filename)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Success"))
-	})
+		fmt.Printf("[SERVEUR] Reçu : %s\n", filename)
 
+		// Respond ASAP
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 	http.HandleFunc("/log", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -175,7 +177,7 @@ func main() {
 	for {
 		fmt.Printf("\n>> Dossier d'entrée configuré : %s\n", *dir)
 		fmt.Println(">> Appuyez sur Entree pour traiter les fichiers (ou tapez 'q' pour quitter)...")
-		
+
 		userInput, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(userInput)) == "q" {
 			break
@@ -198,7 +200,7 @@ func main() {
 		for _, f := range files {
 			fmt.Printf(".. Traitement de : %s...\n", filepath.Base(f))
 			recs, stat := processPDF(f)
-			
+
 			if anyFile == "" {
 				anyFile = f
 			}
@@ -912,10 +914,10 @@ func parseBlock(block string) []Record {
 	reNum := `([0-9]+[.,]?[0-9]*)`
 	reLeft := regexp.MustCompile(`(?is)À?\s*(?:gauche|links)[\r\n\s\.:\-_]*` + reNum)
 	reRight := regexp.MustCompile(`(?is)À?\s*(?:droite|rechts)[\r\n\s\.:\-_]*` + reNum)
-	
+
 	mLeft := reLeft.FindStringSubmatch(norm)
 	mRight := reRight.FindStringSubmatch(norm)
-	
+
 	isPaire := false
 	if mLeft != nil && mRight != nil {
 		vL, _ := strconv.ParseFloat(strings.ReplaceAll(mLeft[1], ",", "."), 64)
@@ -934,19 +936,19 @@ func parseBlock(block string) []Record {
 			if len(parts) == 2 {
 				wStr := strings.TrimSpace(parts[0])
 				hVal := strings.TrimSpace(parts[1])
-				
+
 				wVal, err := strconv.ParseFloat(strings.ReplaceAll(wStr, ",", "."), 64)
 				if err == nil && wVal > 0 {
 					halfW := wVal / 2
-					
+
 					r1 := rec
 					r1.OrderItem = fmt.Sprintf("%d/1", itemX)
 					r1.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
-					
+
 					r2 := rec
 					r2.OrderItem = fmt.Sprintf("%d/2", itemX)
 					r2.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
-					
+
 					logDebug("RÈGLE PAIRE APPLIQUÉE (Détecté: %s/%s): %s x %s", mLeft[1], mRight[1], cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)), cleanDim(hVal))
 					return []Record{r1, r2}
 				}
@@ -1054,7 +1056,7 @@ func extractSize(block string) string {
 	}
 
 	if w != "" && h != "" {
-		// IMPORTANT: DO NOT divide by 2 here. The 'Paire' rule division 
+		// IMPORTANT: DO NOT divide by 2 here. The 'Paire' rule division
 		// is explicitly handled in parseBlock. Doing it here causes a double-division.
 		return cleanDim(w) + " x " + cleanDim(h)
 	}
@@ -1145,7 +1147,7 @@ func exportExcel(r []Record, f string) {
 
 		timestamp := time.Now().Format("20060102_150405")
 		archivePath := filepath.Join(archiveDir, fmt.Sprintf("output_%s.xlsx", timestamp))
-		
+
 		if err := ex.SaveAs(archivePath); err == nil {
 			fmt.Printf("[ARCHIVE] Copie sauvegardee : %s\n", filepath.Base(archivePath))
 		}

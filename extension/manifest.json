@@ -1,19 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "PDFXport Harvester",
-  "version": "3.5",
+  "name": "PDF Interceptor Pro",
+  "version": "3.0",
   "permissions": [
-    "scripting",
-    "storage"
+    "scripting"
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "PDFXport Controller"
-  },
   "host_permissions": [
     "https://app.decoloop.com/*",
     "https://sievalhub.sieval.com/*",
-    "http://localhost:8765/*"
+    "http://localhost:8080/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,7 +16,7 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.decoloop.com/*"
+        "https://app.decoloop.com/*"
       ],
       "js": [
         "content_main.js"
@@ -32,10 +27,12 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "inject_xhr.js"
+        "inject_xhr.js",
+        "inject_fetch.js",
+        "inject_blob.js"
       ],
       "matches": [
-        "*://*.decoloop.com/*"
+        "https://app.decoloop.com/*"
       ]
     }
   ]
