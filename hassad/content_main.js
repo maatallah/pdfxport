@@ -19,19 +19,20 @@
         }
     });
 
-    // 3. The Staging Engine (Mise en Grange)
+    // 3. The Staging Engine (Mise en Grange) — race-free
+    let stagingBuffer = {};
+    chrome.storage.local.get(['stagingBuffer'], (res) => {
+        stagingBuffer = res.stagingBuffer || {};
+    });
+
     window.addEventListener("message", function (event) {
         if (event.source !== window) return;
         if (event.data.type === "HARVESTED_ID") {
             const { orderNum, projectId, polygons, token } = event.data;
 
-            chrome.storage.local.get(['stagingBuffer'], function(result) {
-                const buffer = result.stagingBuffer || {};
-                buffer[orderNum] = { projectId, polygons, token, timestamp: Date.now() };
-                
-                chrome.storage.local.set({ stagingBuffer: buffer }, () => {
-                    console.log(`🌾 Épi capturé: ${orderNum} (${polygons.length} polygones)`);
-                });
+            stagingBuffer[orderNum] = { projectId, polygons, token, timestamp: Date.now() };
+            chrome.storage.local.set({ stagingBuffer }, () => {
+                console.log(`🌾 Épi capturé: ${orderNum} (${polygons.length} polygones)`);
             });
         }
     });

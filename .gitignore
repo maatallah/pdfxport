@@ -10,3 +10,8 @@
 *.exe~
 *.7z
 *.txt
+"in/" 
+"out/" 
+"*.exe" 
+"*.xlsx" 
+"jobs.db" 

@@ -139,31 +139,50 @@ func main() {
 
 	fmt.Println(">> Demarrage du programme Go...")
 
-	runServer := flag.Bool("server", false, "")
+	runServer := flag.Bool("server", false, "Démarrer en mode serveur (réception)")
+	runDump := flag.Bool("dump", false, "Afficher uniquement le texte brut (diagnostic)")
 
-	input := flag.String("input", "", "")
-	dir := flag.String("dir", "", "")
-	outdir := flag.String("outdir", "", "")
+	input := flag.String("input", "", "Fichier PDF unique")
+	dir := flag.String("dir", "./in", "Dossier d'entrée")
+	outdir := flag.String("outdir", "./out", "Dossier de sortie")
 
-	jsonFlag := flag.Bool("json", false, "")
-	csvFlag := flag.Bool("csv", false, "")
-	excelFlag := flag.Bool("excel", false, "")
-	debug := flag.Bool("debug", false, "")
+	jsonFlag := flag.Bool("json", false, "Exporter en JSON")
+	csvFlag := flag.Bool("csv", false, "Exporter en CSV")
+	excelFlag := flag.Bool("excel", true, "Exporter en Excel")
+	debug := flag.Bool("debug", false, "Mode debug détaillé")
 
 	flag.Parse()
 
-	if *runServer {
-		fmt.Println(">> Démarrage en MODE SERVEUR. Gardez cette fenêtre ouverte en arrière-plan.")
-		startServer() // Blocks forever
-		return
-	}
+	// Initialisation globale du DEBUG
 	DEBUG = *debug
 	if DEBUG {
 		pdf.DebugOn = true
 	}
 
-	if !*jsonFlag && !*csvFlag && !*excelFlag {
-		*excelFlag = true
+	// 1. MODE SERVEUR
+	if *runServer {
+		fmt.Println(">> Démarrage en MODE SERVEUR. Gardez cette fenêtre ouverte.")
+		startServer()
+		return
+	}
+
+	// 2. MODE DUMP (Export vers parsed.txt)
+	if *runDump {
+		files := collectFiles(*input, *dir, flag.Args())
+		for _, f := range files {
+			fmt.Printf(">> Extraction brute : %s...\n", filepath.Base(f))
+			text, err := extractText(f)
+			if err != nil {
+				fmt.Printf("❌ Erreur sur %s : %v\n", f, err)
+				continue
+			}
+			
+			diagPath := filepath.Join(*outdir, "parsed.txt")
+			os.MkdirAll(*outdir, 0755)
+			os.WriteFile(diagPath, []byte(text), 0644)
+			fmt.Printf("✅ Texte brut sauvegardé dans : %s\n", diagPath)
+		}
+		return
 	}
 
 	// Resolve mapped drive letters to UNC paths (fixes Windows 7 UAC elevation)
@@ -255,15 +274,32 @@ func main() {
 
 // -----------------------------
 func collectFiles(input, dir string, args []string) []string {
+	seen := make(map[string]bool)
 	var files []string
-	files = append(files, args...)
+
+	add := func(p string) {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			abs = p
+		}
+		if !seen[abs] {
+			seen[abs] = true
+			files = append(files, p)
+		}
+	}
+
+	for _, a := range args {
+		add(a)
+	}
 
 	if input != "" {
 		if strings.Contains(input, "*") {
 			m, _ := filepath.Glob(input)
-			files = append(files, m...)
+			for _, f := range m {
+				add(f)
+			}
 		} else {
-			files = append(files, input)
+			add(input)
 		}
 	}
 
@@ -276,12 +312,12 @@ func collectFiles(input, dir string, args []string) []string {
 
 		for _, entry := range entries {
 			if entry.IsDir() {
-				continue // Skip all subfolders (limit to 1 level only)
+				continue
 			}
 			p := filepath.Join(dir, entry.Name())
 			ext := strings.ToLower(filepath.Ext(p))
 			if ext == ".pdf" || ext == ".txt" {
-				files = append(files, p)
+				add(p)
 			}
 		}
 	}
@@ -340,6 +376,10 @@ func processPDF(path string) ([]Record, FileStat) {
 		logDebug("\n========= RAW TEXT =========\n%s", text)
 	}
 
+	// DIAGNOSTIC EXPORT: Always write to parsed.txt to see the structure
+	diagPath := filepath.Join(filepath.Dir(path), "parsed.txt")
+	os.WriteFile(diagPath, []byte(text), 0644)
+
 	// 1. Initial pass: try to extract text normally
 	blocks := splitBlocks(text)
 	recs := parseAndFilter(blocks, &stat)
@@ -362,9 +402,14 @@ func processPDF(path string) ([]Record, FileStat) {
 			stat.OCR = true
 			text, _ = extractText(path)
 
-			// LOG the OCR results for user inspection
+			// LOG the OCR results for user inspection (Move to /OCRed)
 			ocrLogPath := strings.TrimSuffix(path, ".pdf") + "_ocr_raw.txt"
 			os.WriteFile(ocrLogPath, []byte(text), 0644)
+
+			// Move the log to /OCRed folder
+			ocrDir := filepath.Join(filepath.Dir(path), "OCRed")
+			os.MkdirAll(ocrDir, 0755)
+			os.Rename(ocrLogPath, filepath.Join(ocrDir, filepath.Base(ocrLogPath)))
 
 			// Second pass with OCR text
 			blocks = splitBlocks(text)
@@ -534,27 +579,37 @@ func parseAndFilter(blocks []string, stat *FileStat) []Record {
 			continue
 		}
 
+		// NEW RULE: Ignore Rails without dimensions
+		if strings.Contains(strings.ToLower(b), "rail") {
+			// Check if dimensions are present in this block
+			if !regexp.MustCompile(`(?i)(Hauteu[r]?|Hoogte|Height|Largeu[r]?|Breedte|Width)\s*[:\s]*[\d.,]+`).MatchString(b) {
+				logDebug("[SKIP] IGNORE (Rail sans dimensions)")
+				stat.Skipped++
+				continue
+			}
+		}
+
 		// Carry over page-level headers to subsequent blocks
-		if m := regexp.MustCompile(`(?i)(Commande\s*:\s*\S+)`).FindString(b); m != "" {
-			lastCmd = m
+		if m := regexp.MustCompile(`(?i)Commande\s*[:]?\s*(\S+)`).FindStringSubmatch(b); m != nil {
+			lastCmd = m[1]
 		}
-		if m := regexp.MustCompile(`KLT-[\s\r\n]*\d+`).FindString(b); m != "" {
-			lastCode = m
+		if m := regexp.MustCompile(`(?i)KLT-?[\s\r\n]*(\d+)`).FindStringSubmatch(b); m != nil {
+			lastCode = m[1]
 		}
-		if m := regexp.MustCompile(`(?si)(Nom\s*:\s*.*?\s*\(KLT-.*?\))`).FindString(b); m != "" {
-			lastNom = m
+		if m := regexp.MustCompile(`(?i)Nom\s*[:]?\s*([^\r\n]+)`).FindStringSubmatch(b); m != nil {
+			lastNom = m[1]
 		}
 
 		// Re-inject missing headers to ensure parseBlock has full context
 		missingHeaders := ""
 		if !regexp.MustCompile(`(?i)Commande\s*:`).MatchString(b) && lastCmd != "" {
-			missingHeaders += lastCmd + "\n"
+			missingHeaders += "Commande:" + lastCmd + "\n"
 		}
-		if !regexp.MustCompile(`KLT-`).MatchString(b) && lastCode != "" {
-			missingHeaders += lastCode + "\n"
+		if !regexp.MustCompile(`(?i)(KLT-|Code\s*[:])`).MatchString(b) && lastCode != "" {
+			missingHeaders += "KLT-" + lastCode + "\n"
 		}
 		if !regexp.MustCompile(`(?i)Nom\s*:`).MatchString(b) && lastNom != "" {
-			missingHeaders += lastNom + "\n"
+			missingHeaders += "Nom:" + lastNom + "\n"
 		}
 		if missingHeaders != "" {
 			b = missingHeaders + b
@@ -565,8 +620,9 @@ func parseAndFilter(blocks []string, stat *FileStat) []Record {
 		// Only keep records that successfully extracted an Order Number
 		for _, r := range recs {
 			// Avoid exact duplicates in the same file (footer barcodes)
+			// EXCEPT if they are legitimate splits (Paire/Split)
 			uniqueKey := r.OrderNumber + "|" + r.OrderItem + "|" + r.Size
-			if r.OrderNumber != "" && !processedIDs[uniqueKey] {
+			if r.OrderNumber != "" && (!processedIDs[uniqueKey] || isPaireRecord(r, recs)) {
 				out = append(out, r)
 				processedIDs[uniqueKey] = true
 			}
@@ -590,6 +646,19 @@ func parseAndFilter(blocks []string, stat *FileStat) []Record {
 	}
 
 	return out
+}
+
+func isPaireRecord(r Record, recs []Record) bool {
+	if len(recs) < 2 {
+		return false
+	}
+	count := 0
+	for _, x := range recs {
+		if x.OrderNumber == r.OrderNumber && x.OrderItem == r.OrderItem && x.Size == r.Size {
+			count++
+		}
+	}
+	return count > 1
 }
 
 // -----------------------------
@@ -791,19 +860,14 @@ func parseBlock(block string) []Record {
 		rec.Reference = strings.TrimSpace(m[1])
 	}
 
-	reCode := regexp.MustCompile(`(?i)KLT-[\s\r\n]*(\d+)`)
-	if cm := reCode.FindStringSubmatch(norm); len(cm) > 1 {
+	reCode := regexp.MustCompile(`(?i)KLT-?\s*(\d{3,7})`)
+	if cm := reCode.FindStringSubmatch(norm); cm != nil {
 		rec.ClientCode = cm[1]
-	} else {
-		reRawCode := regexp.MustCompile(`\(KLT-(\d+)\)`)
-		if cm := reRawCode.FindStringSubmatch(norm); len(cm) > 1 {
-			rec.ClientCode = cm[1]
-		}
 	}
 
-	reNom := regexp.MustCompile(`(?si)Nom\s*:\s*(.*?)\s*\(KLT-.*?\)`)
+	reNom := regexp.MustCompile(`(?i)Nom\s*[:]?\s*([^\r\n(]+)`)
 	if m := reNom.FindStringSubmatch(norm); m != nil {
-		rec.ClientName = strings.Join(strings.Fields(m[1]), " ")
+		rec.ClientName = strings.TrimSpace(m[1])
 	}
 
 	rec.Piece = extractPiece(norm)
@@ -856,8 +920,8 @@ func parseBlock(block string) []Record {
 	// Require a colon or whitespace after 'Hauteur' to avoid matching other
 	// occurrences like 'grand hauteur... 10 cm' earlier in the block.
 	reH := regexp.MustCompile(`(?i)Hauteur\s*[:\s]*([\d.,]+)`)
-	reLeftZero := regexp.MustCompile(`(?is)(?:À|A|à|a)\s*gauche[^0-9]*0`)
-	reRightZero := regexp.MustCompile(`(?is)(?:À|A|à|a)\s*droite[^0-9]*0`)
+	reLeftVal := regexp.MustCompile(`(?is)(?:À|A|à|a)\s*gauche\D*([\d.,]+)`)
+	reRightVal := regexp.MustCompile(`(?is)(?:À|A|à|a)\s*droite\D*([\d.,]+)`)
 
 	reGauge := regexp.MustCompile(`(?i)Gauge\s*[:\s]*([\d.,]+)`)
 	reDroite := regexp.MustCompile(`(?i)Droite\s*[:\s]*([\d.,]+)`)
@@ -867,8 +931,18 @@ func parseBlock(block string) []Record {
 		hStr = strings.ReplaceAll(m[1], ",", ".")
 	}
 
-	isLeftZero := reLeftZero.MatchString(norm)
-	isRightZero := reRightZero.MatchString(norm)
+	isLeftZero := false
+	if mL := reLeftVal.FindStringSubmatch(norm); mL != nil {
+		if v, err := strconv.ParseFloat(strings.ReplaceAll(mL[1], ",", "."), 64); err == nil {
+			isLeftZero = v == 0
+		}
+	}
+	isRightZero := false
+	if mR := reRightVal.FindStringSubmatch(norm); mR != nil {
+		if v, err := strconv.ParseFloat(strings.ReplaceAll(mR[1], ",", "."), 64); err == nil {
+			isRightZero = v == 0
+		}
+	}
 
 	gStr := ""
 	dStr := ""
@@ -891,14 +965,14 @@ func parseBlock(block string) []Record {
 
 		if gStr != "" {
 			r1 := rec
-			r1.OrderItem = fmt.Sprintf("%d/1", itemX)
+			r1.OrderItem = fmt.Sprintf("%d/%d", itemX, itemY) // Use original Y
 			r1.Size = gStr + " x " + hStr
 			results = append(results, r1)
 		}
 
 		if dStr != "" {
 			r2 := rec
-			r2.OrderItem = fmt.Sprintf("%d/2", itemX)
+			r2.OrderItem = fmt.Sprintf("%d/%d", itemX, itemY) // Use original Y
 			r2.Size = dStr + " x " + hStr
 			results = append(results, r2)
 		}
@@ -911,9 +985,8 @@ func parseBlock(block string) []Record {
 	// Regex to check for paired curtains (The "Paire" rule)
 	// We specifically look for "À gauche" and "À droite" to avoid mixing with "Lés G/D"
 	// We allow decimals (like 0.5) and check if the value is > 0
-	reNum := `([0-9]+[.,]?[0-9]*)`
-	reLeft := regexp.MustCompile(`(?is)À?\s*(?:gauche|links)[\r\n\s\.:\-_]*` + reNum)
-	reRight := regexp.MustCompile(`(?is)À?\s*(?:droite|rechts)[\r\n\s\.:\-_]*` + reNum)
+	reLeft := regexp.MustCompile(`(?i)À\s*gauche[\s\r\n]*([\d.,]+)`)
+	reRight := regexp.MustCompile(`(?i)À\s*droite[\s\r\n]*([\d.,]+)`)
 
 	mLeft := reLeft.FindStringSubmatch(norm)
 	mRight := reRight.FindStringSubmatch(norm)
@@ -922,7 +995,8 @@ func parseBlock(block string) []Record {
 	if mLeft != nil && mRight != nil {
 		vL, _ := strconv.ParseFloat(strings.ReplaceAll(mLeft[1], ",", "."), 64)
 		vR, _ := strconv.ParseFloat(strings.ReplaceAll(mRight[1], ",", "."), 64)
-		if vL > 0 && vR > 0 {
+		// NEW RULE: Threshold of 20 to trigger a split
+		if vL > 20 && vR > 20 {
 			isPaire = true
 		}
 	}
@@ -942,11 +1016,11 @@ func parseBlock(block string) []Record {
 					halfW := wVal / 2
 
 					r1 := rec
-					r1.OrderItem = fmt.Sprintf("%d/1", itemX)
+					r1.OrderItem = fmt.Sprintf("%d/%d", itemX, itemY)
 					r1.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
 
 					r2 := rec
-					r2.OrderItem = fmt.Sprintf("%d/2", itemX)
+					r2.OrderItem = fmt.Sprintf("%d/%d", itemX, itemY)
 					r2.Size = cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)) + " x " + cleanDim(hVal)
 
 					logDebug("RÈGLE PAIRE APPLIQUÉE (Détecté: %s/%s): %s x %s", mLeft[1], mRight[1], cleanDim(strconv.FormatFloat(halfW, 'f', -1, 64)), cleanDim(hVal))
@@ -1033,11 +1107,16 @@ func extractSize(block string) string {
 		// Special heuristic for "154.5 cm \n 90.5 cm" appearance
 		reCM := regexp.MustCompile(`([\d.,]+)\s*cm`)
 		matches := reCM.FindAllStringSubmatch(block, -1)
-		if len(matches) >= 2 {
-			hRaw := matches[len(matches)-2][1]
-			wRaw := matches[len(matches)-1][1]
-			h = strings.ReplaceAll(hRaw, ",", ".")
-			w = strings.ReplaceAll(wRaw, ",", ".")
+		for _, m := range matches {
+			val := strings.ReplaceAll(m[1], ",", ".")
+			fVal, _ := strconv.ParseFloat(val, 64)
+			if fVal > 0 {
+				if w == "" {
+					w = cleanDim(val)
+				} else if h == "" {
+					h = cleanDim(val)
+				}
+			}
 		}
 	}
 
@@ -1056,15 +1135,19 @@ func extractSize(block string) string {
 	}
 
 	if w != "" && h != "" {
-		// IMPORTANT: DO NOT divide by 2 here. The 'Paire' rule division
-		// is explicitly handled in parseBlock. Doing it here causes a double-division.
-		return cleanDim(w) + " x " + cleanDim(h)
+		fW, _ := strconv.ParseFloat(w, 64)
+		fH, _ := strconv.ParseFloat(h, 64)
+		if fW > 0 && fH > 0 {
+			return cleanDim(w) + " x " + cleanDim(h)
+		}
 	}
 	if w != "" {
-		return cleanDim(w)
+		fW, _ := strconv.ParseFloat(w, 64)
+		if fW > 0 { return cleanDim(w) }
 	}
 	if h != "" {
-		return cleanDim(h)
+		fH, _ := strconv.ParseFloat(h, 64)
+		if fH > 0 { return cleanDim(h) }
 	}
 	return ""
 }
@@ -1099,23 +1182,28 @@ func exportCSV(r []Record, f string) {
 	}
 }
 
-func exportExcel(r []Record, f string) {
+func exportExcel(records []Record, outPath string) {
 	ex := excelize.NewFile()
 	s := "Orders"
 	ex.SetSheetName(ex.GetSheetName(0), s)
 
+	// Create a text style to force Excel to treat everything as text (@)
+	textStyle, _ := ex.NewStyle(&excelize.Style{
+		NumFmt: 49,
+	})
+
 	headers := []string{"OrderNumber", "OrderItem", "ClientCode", "ClientName", "Reference", "Piece", "Size"}
+	colWidths := make([]int, len(headers))
+
+	// Write Headers
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		ex.SetCellValue(s, cell, h)
-	}
-
-	colWidths := make([]int, len(headers))
-	for i, h := range headers {
+		ex.SetCellStr(s, cell, h)
 		colWidths[i] = len(h)
 	}
 
-	for i, rec := range r {
+	// Write Records
+	for i, rec := range records {
 		values := []string{rec.OrderNumber, rec.OrderItem, rec.ClientCode, rec.ClientName, rec.Reference, rec.Piece, rec.Size}
 		for j, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(j+1, i+2)
@@ -1126,31 +1214,31 @@ func exportExcel(r []Record, f string) {
 		}
 	}
 
+	// Apply column widths and text style
 	for i, w := range colWidths {
 		colName, _ := excelize.ColumnNumberToName(i + 1)
-		// Add a little padding to the calculated max width
 		ex.SetColWidth(s, colName, colName, float64(w)+2.0)
 	}
+	ex.SetColStyle(s, "A:G", textStyle)
 
-	if err := ex.SaveAs(f); err != nil {
+	// Save main file
+	if err := ex.SaveAs(outPath); err != nil {
 		fmt.Printf("\n[ERREUR FATALE] Impossible de sauvegarder le fichier Excel : %v\n", err)
 		fmt.Printf("--> VERIFIEZ QUE LE FICHIER N'EST PAS OUVERT DANS EXCEL !\n")
-		fmt.Println("\nAppuyez sur Entree pour quitter...")
+		fmt.Println("\nAppuyez sur Entree pour continuer...")
 		bufio.NewReader(os.Stdin).ReadBytes('\n')
 	} else {
-		fmt.Printf("[OK] %d lignes ecrites avec succes dans Excel !\n", len(r))
+		fmt.Printf("[OK] %d lignes ecrites avec succes dans Excel !\n", len(records))
 
 		// ARCHIVE: Create a timestamped copy in an 'archive' subfolder
-		dir := filepath.Dir(f)
+		dir := filepath.Dir(outPath)
 		archiveDir := filepath.Join(dir, "archive")
 		os.MkdirAll(archiveDir, 0755)
 
 		timestamp := time.Now().Format("20060102_150405")
 		archivePath := filepath.Join(archiveDir, fmt.Sprintf("output_%s.xlsx", timestamp))
-
-		if err := ex.SaveAs(archivePath); err == nil {
-			fmt.Printf("[ARCHIVE] Copie sauvegardee : %s\n", filepath.Base(archivePath))
-		}
+		ex.SaveAs(archivePath)
+		fmt.Printf("[ARCHIVE] Copie sauvegardee : %s\n", filepath.Base(archivePath))
 	}
 }
 
