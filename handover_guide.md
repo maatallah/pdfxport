@@ -3,7 +3,7 @@
 **Local path:** `M:\dev\cpt\PDFXport`\
 **GitHub repo:** <https://github.com/maatallah/pdfxport>\
 **Active branch:** `workspace-sync`\
-**System type:** Headless Go API orchestrator (Phase 2 — no browser dependency)
+**System type:** Two-binary pipeline — headless orchestrator + PDF parsing engine
 
 > **Quick start on a new PC:** run `.\setup_dev_env.ps1` from the project root.
 
@@ -11,122 +11,291 @@
 
 # 1. 🧠 System Overview
 
-PDFXport is a **headless PDF batch generation pipeline** that calls the Sieval API
-directly — no browser, no Chrome extension — and stores the resulting PDFs for
-downstream parsing and structured data export.
+PDFXport is a **two-binary pipeline** that:
 
-It is now fully in **Phase 2**: the browser extension is deprecated (kept for
-reference only).
+1. **Moissonneuse-Serveur** (the orchestrator) — calls the Sieval web API to
+   batch-download PDFs for every open production order, stores them locally.
+2. **Moissonneuse-Moulin** (the parser) — reads those PDFs, extracts structured
+   order data (dimensions, client, reference, piece type…), and writes an Excel
+   file ready for label printing.
 
----
-
-## 🧩 Architecture (current — Phase 2)
-
-```
-[Go Orchestrator — Moissonneuse]
-        │
-        ├─ SQLite queue  (jobs.db)
-        │     • pending → processing → done / failed
-        │
-        ├─ HTTP server  (port 8765)
-        │     POST /ingest   ← browser extension (legacy)
-        │     GET  /health   ← monitoring
-        │     GET  /metrics  ← harvest stats
-        │
-        ├─ API client  → sievalhub.sieval.com
-        │     POST /api/productiondata/document/generatePdfDocument
-        │
-        ├─ File storage  → ./output/<OrderNum>/
-        │
-        └─ System tray UI  (Windows systray)
-              • live tooltip: job count / active order
-              • "Reset Grenier" → safely wipe jobs.db
-              • "Quit" → graceful shutdown
-```
+Both binaries are built from the same repository in separate Go modules.
 
 ---
 
-# 2. 📁 Actual Project Structure
+## 🧩 Full System Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  LAYER 1 — Capture (deprecated, kept in /trash)          │
+│  Chrome Extension (MV3)                                  │
+│  ├─ content_main.js   intercept XHR/fetch blobs          │
+│  ├─ inject_xhr.js     XHR hook                           │
+│  ├─ inject_fetch.js   fetch hook                         │
+│  ├─ inject_blob.js    blob hook                          │
+│  └─ background.js     Base64 → POST → Go server          │
+└──────────────────────────────────────────────────────────┘
+                         ↓ (legacy path, port 8765/upload)
+┌──────────────────────────────────────────────────────────┐
+│  LAYER 2 — Orchestrator  (Moissonneuse-Serveur.exe)      │
+│  Go module: pdfxport-orchestrator/                       │
+│  ├─ cmd/main.go        systray + HTTP server + loop      │
+│  ├─ internal/client/   Sieval API client (JWT auth)      │
+│  ├─ internal/queue/    SQLite job queue                  │
+│  ├─ internal/storage/  PDF file output                   │
+│  ├─ internal/engine/   batch engine                      │
+│  └─ internal/utils/    embedded tray icon                │
+│                                                          │
+│  Endpoints:                                              │
+│  POST /ingest  ← receive job from extension              │
+│  GET  /health  ← health probe                           │
+│  GET  /metrics ← harvest stats                           │
+│  POST /upload  ← legacy binary PDF upload               │
+└──────────────────────────────────────────────────────────┘
+                         ↓ PDFs → ./output/<OrderNum>/
+┌──────────────────────────────────────────────────────────┐
+│  LAYER 3 — Parser  (Moissonneuse-Moulin.exe / ptxrid.exe)│
+│  Go module: root (module: pdfparser)                     │
+│  ├─ main.go            CLI + server + processing loop    │
+│  ├─ unc_windows.go     UNC path resolution (Win7 UAC)    │
+│  ├─ unc_other.go       stub for non-Windows builds       │
+│  └─ pdf/               git submodule (ledongthuc/pdf)    │
+│                                                          │
+│  Extraction pipeline per PDF:                            │
+│  1. extractText()  — ledongthuc/pdf library              │
+│  2. splitBlocks()  — split by Sur-mesure / Commande ID   │
+│  3. parseBlock()   — regex-based field extraction        │
+│  4. OCR fallback   — NAPS2.Console.exe + Tesseract       │
+│  5. exportExcel()  — excelize, text format, archive copy │
+└──────────────────────────────────────────────────────────┘
+                         ↓ output.xlsx  +  archive/
+┌──────────────────────────────────────────────────────────┐
+│  LAYER 4 — Output                                        │
+│  output.xlsx      → label printing system (Excel-based)  │
+│  archive/         → timestamped copies per batch         │
+│  extraction_log.tsv → per-file stats (items, OCR, moved) │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+# 2. 📁 Complete Project Structure
 
 ```
 PDFXport/
 │
-├── pdfxport-orchestrator/          ← GO ORCHESTRATOR (main deliverable)
+├── ── BINARY 1: MOISSONNEUSE-SERVEUR ─────────────────────
+│
+├── pdfxport-orchestrator/              Go module: pdfxport-orchestrator
 │   ├── cmd/
-│   │   └── main.go                 # entry point — systray + HTTP + processing loop
+│   │   └── main.go                    entry: systray + HTTP + processing goroutine
 │   ├── internal/
-│   │   ├── client/
-│   │   │   └── sieval.go           # API client (JWT auth, PDF download)
-│   │   ├── config/
-│   │   │   └── config.go           # runtime config
-│   │   ├── engine/
-│   │   │   └── batch.go            # batch processing logic
-│   │   ├── queue/
-│   │   │   └── sqlite.go           # SQLite job queue (FetchBatch, MarkDone, MarkFailed, Close)
-│   │   ├── storage/
-│   │   │   └── file_store.go       # PDF file persistence
-│   │   └── utils/
-│   │       └── icon.go             # embedded systray icon ([]byte)
-│   ├── build/                      # local build output (git-ignored)
+│   │   ├── client/sieval.go           API client: JWT auth, PDF download
+│   │   ├── config/config.go           runtime config
+│   │   ├── engine/batch.go            batch processing logic
+│   │   ├── queue/sqlite.go            SQLite queue (FetchBatch/MarkDone/MarkFailed/Close)
+│   │   ├── storage/file_store.go      PDF output persistence
+│   │   └── utils/icon.go             embedded systray icon ([]byte)
+│   ├── build/                         local build output (git-ignored)
+│   ├── jobs.db                        live queue (git-ignored)
+│   ├── output/                        downloaded PDFs (git-ignored)
 │   ├── go.mod
 │   └── go.sum
 │
-├── pdf/                            # git submodule — PDF parser
-├── release/                        # compiled release binaries (git-ignored)
-│   ├── Moissonneuse-Moulin.exe     # PDF parser binary
-│   ├── Moissonneuse-Serveur.exe    # orchestrator binary
-│   ├── jobs.db                     # live queue database
-│   └── output/                     # harvested PDFs
+├── ── BINARY 2: MOISSONNEUSE-MOULIN ──────────────────────
 │
-├── handover_guide.md               ← this file
-├── setup_dev_env.ps1               ← new-PC setup script
-├── .gitignore
-└── walkthrough_fr.md               # French-language operational walkthrough
+├── main.go                            Go entry point — CLI flags + parse loop
+├── unc_windows.go                     UNC path resolver (Windows 7 network drives)
+├── unc_other.go                       build stub for non-Windows
+├── go.mod                             module: pdfparser, Go 1.20
+├── go.sum
+│
+├── pdf/                               git SUBMODULE — ledongthuc/pdf (forked)
+│   ├── read.go                        PDF reader
+│   ├── page.go                        page/text extraction
+│   └── text.go                        text layer
+│
+├── App/                               OCR runtime (git-ignored)
+│   ├── NAPS2.Console.exe              OCR engine CLI (NAPS2 portable)
+│   └── tessdata/                      Tesseract language data (fra.traineddata etc.)
+│
+├── ── OPERATIONAL SCRIPTS ─────────────────────────────────
+│
+├── ptxrid.exe                         Compiled Moulin parser binary
+├── ptxrid.bat                         Interactive launcher (prompts for in/out dirs)
+├── start_server.bat                   Starts Moulin in -server mode (HTTP receiver)
+├── update_codes.ps1                   Cross-checks codes.txt against downloaded PDFs
+├── move_pdfs.ps1                      Helper to move PDFs between folders
+│
+├── ── RELEASE BUILDS ──────────────────────────────────────
+│
+├── release/                           Built binaries (git-ignored)
+│   ├── Moissonneuse-Serveur.exe       orchestrator binary
+│   ├── Moissonneuse-Moulin.exe        parser binary
+│   ├── jobs.db / jobs.db-shm / -wal  live orchestrator queue
+│   └── output/                        downloaded PDFs
+│
+├── ── LEGACY / REFERENCE ──────────────────────────────────
+│
+├── trash/                             Archived Chrome extension (for reference)
+│   ├── extension/                     last working MV3 extension version
+│   │   ├── manifest.json
+│   │   ├── content_main.js
+│   │   ├── background.js
+│   │   ├── inject_xhr.js
+│   │   ├── inject_fetch.js
+│   │   └── inject_blob.js
+│   └── BulkOrder/                     bulk-order variant of the extension
+│
+├── ── DOCUMENTATION ───────────────────────────────────────
+│
+├── handover_guide.md                  ← this file
+├── setup_dev_env.ps1                  new-PC automated setup script
+├── walkthrough_fr.md                  French operational walkthrough
+├── Drapeaux parseur.md                Moulin CLI flags reference
+├── Rules_for_size_and_item_ordre.xlsx parsing business rules reference
+└── test.http                          REST Client test file for HTTP endpoints
 ```
 
 ---
 
 # 3. ⚙️ Technology Stack
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Go | ≥ 1.22 (currently 1.26.2) | Orchestrator language |
-| GCC / MinGW-W64 | 15.x | CGO — required by go-sqlite3 + systray |
-| go-sqlite3 | v1.14.44 | Persistent job queue |
-| getlantern/systray | v1.2.2 | Windows system tray UI |
-| Git | ≥ 2.x | Version control |
-| Node.js / npm | optional | Browser extension tooling only |
+## Moissonneuse-Serveur (orchestrator)
 
-> **CGO is mandatory.** `go-sqlite3` and `systray` both require a C compiler.
-> Without MinGW-W64 in `PATH`, the build will fail.
+| Component | Details |
+|-----------|---------|
+| Language | Go 1.26.2 |
+| CGO | **Required** (go-sqlite3 + systray) |
+| C compiler | MinGW-W64 GCC 15.x |
+| DB | SQLite via `github.com/mattn/go-sqlite3 v1.14.44` |
+| Tray | `github.com/getlantern/systray v1.2.2` |
 
----
+## Moissonneuse-Moulin (parser)
 
-# 4. 🔄 Data Flow (Phase 2 — implemented)
-
-```
-1. Browser extension (legacy) OR future scheduler
-         ↓ POST /ingest
-2. HTTP server receives job metadata (OrderNum, ProjectID, DocumentID, Polygons, Lang, Token)
-         ↓
-3. SQLite queue stores job with status=pending
-         ↓
-4. Processing goroutine polls queue (FetchBatch)
-         ↓
-5. API client calls sievalhub.sieval.com with JWT Bearer token
-         ↓
-6. PDF binary returned → saved to ./output/<OrderNum>/
-         ↓
-7. queue.MarkDone(id) — job complete
-         ↓
-8. Systray tooltip updated with progress count
-```
+| Component | Details |
+|-----------|---------|
+| Language | Go 1.20 (last version with official Win7 support) |
+| CGO | **Not required** — pure Go |
+| PDF library | `github.com/ledongthuc/pdf` (local submodule `./pdf`) |
+| Excel output | `github.com/xuri/excelize/v2 v2.8.1` |
+| OCR fallback | NAPS2.Console.exe + Tesseract (`fra` language model) |
 
 ---
 
-# 5. 🔐 API Reference
+# 4. 🔄 Data Flow (end to end)
 
-### Generate PDF
+```
+STEP 1 — Job ingestion
+  Browser extension (or future scheduler)
+    → POST /ingest  to Moissonneuse-Serveur
+    → job stored in jobs.db (status=pending)
+
+STEP 2 — PDF harvesting
+  Moissonneuse-Serveur polling loop
+    → FetchBatch(1) from SQLite
+    → POST /api/productiondata/document/generatePdfDocument
+         Host: sievalhub.sieval.com
+         Authorization: Bearer <JWT>
+    → PDF binary received
+    → Saved to pdfxport-orchestrator/output/<OrderNum>/
+
+STEP 3 — PDF parsing
+  Moissonneuse-Moulin watching ./in folder (or -dir flag)
+    → extractText() via ledongthuc/pdf library
+    → splitBlocks(): split text by "Sur-mesure:" headers
+       Fallback 1: split by "Commande:" labels
+       Fallback 2: split by raw order ID (XXXX.XXXXX.XXX pattern)
+       Fallback 3: treat whole file as one block
+    → parseBlock(): regex extraction per block
+       ├─ Order ID, Item number (X/Y/Z format)
+       ├─ Client code (KLT-XXXXXX)
+       ├─ Client name
+       ├─ Reference
+       ├─ Piece (product type)
+       └─ Size (Hauteur x Largeur, multilingual FR/NL/EN)
+    → Business rules applied:
+       ├─ PAIRE RULE: Left+Right > 20cm → split 1 record into 2 (width ÷ 2 each)
+       ├─ GAUGE/DROITE RULE: À gauche=0, À droite=0 → split by Gauge/Droite values
+       ├─ TISSU FALLBACK: "Hauteur de coupe" / "Largeur de coupe" for fabric orders
+       ├─ DOUBLURE SKIP: blocks with "sur-mesure: doublure" are ignored
+       └─ RAIL SKIP: rail blocks without dimensions are ignored
+
+STEP 4 — OCR fallback (automatic)
+  Triggered when: 0 records extracted OR any record missing Size
+    → NAPS2.Console.exe -i <pdf> -o <pdf> --ocr --ocrlang fra --dpi 300
+    → Re-runs extractText() on the OCR-enhanced PDF
+    → Second parse pass
+    → OCR log saved to ./in/OCRed/<file>_ocr_raw.txt
+
+STEP 5 — File management
+  Success → PDF moved to ./in/processed/<OrderNum>.pdf
+  Failure → PDF moved to ./in/en_instance/  (manual review queue)
+
+STEP 6 — Output
+  output.xlsx    → "Orders" sheet, all columns text-formatted (NumFmt 49)
+  archive/output_YYYYMMDD_HHMMSS.xlsx → timestamped backup copy
+  extraction_log.tsv → per-file: items processed/extracted/skipped/moved/OCR
+```
+
+---
+
+# 5. 🧮 Parsed Data Fields
+
+| Field | Source in PDF | Notes |
+|-------|--------------|-------|
+| `OrderNumber` | `Commande: XXXX.XXXXX` | First two segments of the dot-separated ID |
+| `OrderItem` | Dot ID parts 3+4, formatted `X/Z` | Z = max item in that order |
+| `ClientCode` | `KLT-XXXXXX` | 3–7 digit numeric code |
+| `ClientName` | `Nom: ...` | Free text |
+| `Reference` | `Référence: ...` | Product reference string |
+| `Piece` | `Pièce: ...` / positional OCR fallback | Room name, e.g. "Salon" |
+| `Size` | `Hauteur/Largeur` (FR/NL/EN) in cm | `W x H` format, trailing .0 stripped |
+
+---
+
+# 6. 🖥️ Parser CLI Flags (Moulin)
+
+```
+MODES
+  -server     Start HTTP mode (receives PDFs from Chrome extension on port 8765)
+  -dump       Extract raw text only → saves to out/parsed.txt (diagnostic)
+
+FILES / FOLDERS
+  -input      Single PDF file path
+  -dir        Input folder (default: ./in)
+  -outdir     Output folder (default: ./out)
+
+EXPORT FORMATS
+  -excel      Generate output.xlsx (DEFAULT: true)
+  -json       Generate output.json
+  -csv        Generate output.csv
+
+DIAGNOSTIC
+  -debug      Verbose mode: logs every block parse, field match, rule trigger
+              Also writes <filename>_debug.txt next to each PDF
+```
+
+**Examples:**
+```powershell
+# Normal batch processing (interactive, press Enter each run)
+.\ptxrid.exe -dir ".\in" -outdir ".\out"
+
+# Single file
+.\ptxrid.exe -input ".\in\60FG.00063.pdf" -excel
+
+# Diagnose a problematic PDF
+.\ptxrid.exe -input ".\in\problem.pdf" -dump -debug
+
+# Run as HTTP server to receive from Chrome extension
+.\ptxrid.exe -server
+```
+
+---
+
+# 7. 🔐 API Reference
+
+### Generate PDF (Sieval)
 ```http
 POST https://sievalhub.sieval.com/api/productiondata/document/generatePdfDocument
 Authorization: Bearer <JWT>
@@ -139,114 +308,288 @@ Content-Type: application/json
 }
 ```
 
-### Health check
-```
-GET http://localhost:8765/health
+### Orchestrator endpoints (port 8765)
+```http
+GET  /health                  → 200 OK + CORS headers
+GET  /metrics                 → harvest stats JSON
+POST /ingest                  → submit a new job (JSON body below)
+POST /upload                  → legacy: raw PDF binary stream
+GET  /log  (POST)             → browser debug log receiver
 ```
 
-### Metrics
-```
-GET http://localhost:8765/metrics
-```
-
-### Ingest job (from extension or test)
-```
-POST http://localhost:8765/ingest
-Content-Type: application/json
-
+### Ingest job payload
+```json
 {
-  "orderNum": "ORD-001",
-  "projectId": 210576,
+  "orderNum":   "60FG.00063",
+  "projectId":  210576,
   "documentId": 12345,
-  "polygons": [573286, 573287],
-  "lang": "fr",
-  "token": "eyJ..."
+  "polygons":   [573286, 573287],
+  "lang":       "fr",
+  "token":      "eyJ..."
 }
 ```
 
 ---
 
-# 6. 🏗️ Build Instructions
-
-### Prerequisites
-```powershell
-# Check everything is ready
-.\setup_dev_env.ps1
-```
-
-### Build Moissonneuse-Serveur (orchestrator)
-```powershell
-cd pdfxport-orchestrator
-$env:CGO_ENABLED = "1"
-go build -o build\Moissonneuse-Serveur.exe ./cmd/main.go
-```
-
-### Build with version info (release)
-```powershell
-$ver = "1.3.0"
-go build -ldflags "-X main.Version=$ver" -o ..\release\Moissonneuse-Serveur.exe ./cmd/main.go
-```
-
-### Run in dev mode (console visible)
-```powershell
-cd pdfxport-orchestrator
-$env:CGO_ENABLED = "1"
-go run ./cmd/main.go
-```
-
----
-
-# 7. 🗄️ SQLite Queue Schema
+# 8. 🗄️ SQLite Queue Schema
 
 ```sql
 CREATE TABLE jobs (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_num  TEXT,
-    project_id INTEGER,
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_num   TEXT,
+    project_id  INTEGER,
     document_id INTEGER,
-    polygons   TEXT,       -- JSON array
-    lang       TEXT,
-    token      TEXT,
-    status     TEXT DEFAULT 'pending',   -- pending | done | failed
-    attempts   INTEGER DEFAULT 0,
-    last_error TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    polygons    TEXT,           -- JSON array "[573286,573287]"
+    lang        TEXT,
+    token       TEXT,
+    status      TEXT DEFAULT 'pending',  -- pending | done | failed
+    attempts    INTEGER DEFAULT 0,
+    last_error  TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-**Key operations:**
 | Function | Description |
 |----------|-------------|
-| `FetchBatch(n)` | Atomically claim n pending jobs |
-| `MarkDone(id)` | Set status=done |
-| `MarkFailed(id, err)` | Set status=failed, increment attempts, store error |
-| `Close()` | Safely close DB handle (needed before deleting jobs.db) |
+| `FetchBatch(n)` | Atomically claims n pending jobs |
+| `MarkDone(id)` | Sets status=done |
+| `MarkFailed(id, err)` | Sets status=failed, increments attempts, stores error |
+| `Close()` | Safely closes DB handle (must call before deleting jobs.db) |
 
 ---
 
-# 8. 🖥️ Systray Menu
+# 9. 🖥️ Systray Menu (Serveur)
 
-| Menu item | Action |
-|-----------|--------|
-| 🌾 Statut: En écoute (Port 8765) | Disabled label — shows server status |
-| 🧹 Vider le Grenier | Calls `queue.Close()`, removes `jobs.db`, re-opens queue |
-| 🚪 Quitter | Calls `systray.Quit()` → triggers `onExit()` |
+| Item | Action |
+|------|--------|
+| 🌾 Statut: En écoute (Port 8765) | Disabled label |
+| 🧹 Vider le Grenier | `queue.Close()` → delete jobs.db → reopen queue |
+| 🚪 Quitter | `systray.Quit()` → graceful shutdown |
 
 **Tooltip states:**
 - `En attente...` — idle
-- `🚜 Récolte en cours : ORD-001` — active job
-- `🌾 42 récoltés (Dernier: ORD-042)` — after completion
+- `🚜 Récolte en cours : 60FG.00063` — processing
+- `🌾 42 récoltés (Dernier: 60FG.00063)` — batch complete
 
 ---
 
-# 9. 🧪 Testing
+# 10. 🏗️ Build Instructions
+
+## Prerequisites
+```powershell
+.\setup_dev_env.ps1   # checks and installs all required tools
+```
+
+## Moissonneuse-Serveur (requires CGO + MinGW)
+```powershell
+cd pdfxport-orchestrator
+$env:CGO_ENABLED = "1"
+go build -o ..\release\Moissonneuse-Serveur.exe .\cmd\main.go
+```
+
+## Moissonneuse-Moulin / ptxrid (pure Go, no CGO needed)
+```powershell
+# From project root
+go build -o release\Moissonneuse-Moulin.exe .
+# or as the legacy name:
+go build -o ptxrid.exe .
+```
+
+## Build with version tag
+```powershell
+$ver = "1.3.0"
+# Serveur
+cd pdfxport-orchestrator
+go build -ldflags "-X main.Version=$ver" -o ..\release\Moissonneuse-Serveur.exe .\cmd\main.go
+cd ..
+# Moulin
+go build -ldflags "-X main.Version=$ver" -o release\Moissonneuse-Moulin.exe .
+```
+
+## Run in dev mode
+```powershell
+# Serveur
+cd pdfxport-orchestrator && $env:CGO_ENABLED="1" && go run .\cmd\main.go
+
+# Moulin (interactive)
+go run . -dir .\in -outdir .\out -debug
+
+# Moulin (server mode)
+go run . -server
+```
+
+---
+
+# 11. 🔬 OCR Subsystem
+
+The Moulin parser has an **automatic OCR fallback** for image-only or badly
+scanned PDFs.
+
+### Trigger conditions
+- Zero records extracted from a PDF, OR
+- Any extracted record is missing its `Size` field
+
+### OCR Engine
+- **NAPS2 Portable** (CLI) — must be present in `./App/NAPS2.Console.exe`
+- **Tesseract** bundled with NAPS2 — French language model (`fra`)
+
+### Process
+```
+1. NAPS2.Console.exe -i <pdf> -o <pdf> --ocr --ocrlang fra --dpi 300
+   (overwrites the PDF with an OCR text layer)
+2. re-run extractText() on the enhanced PDF
+3. raw OCR text saved to ./in/OCRed/<filename>_ocr_raw.txt
+4. second parse pass with same block-splitting logic
+```
+
+### Setup on a new PC
+```powershell
+# Copy the App folder from an existing installation
+# It contains NAPS2.Console.exe + tessdata/
+# NAPS2 portable: https://www.naps2.com/download
+# Tesseract language files: https://github.com/tesseract-ocr/tessdata
+```
+
+> **Note:** `App/` is in `.gitignore`. Copy it manually when setting up a new machine.
+
+---
+
+# 12. 📜 Operational Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `ptxrid.bat` | Interactive launcher — prompts for input/output dirs, runs Moulin |
+| `start_server.bat` | Starts Moulin in `-server` mode (for Chrome extension pipeline) |
+| `update_codes.ps1` | Compares `codes.txt` against downloaded PDFs in the output folder, marks which orders are present (`Y`/blank) |
+| `move_pdfs.ps1` | Helper to batch-move PDFs between working folders |
+
+### `update_codes.ps1` details
+```powershell
+# Cross-check codes.txt (tab-separated: Y/blank  TAB  OrderNum)
+# against all PDFs in the orchestrator output folder.
+.\update_codes.ps1 -CodesFile "M:\dev\cpt\PDFXport\codes.txt" `
+                   -PdfDir    "M:\dev\cpt\PDFXport\pdfxport-orchestrator\output"
+```
+
+---
+
+# 13. ⚠️ Known Constraints & Gotchas
+
+### CGO is mandatory for Serveur
+`go-sqlite3` and `getlantern/systray` are CGO packages.
+Pure-Go builds (`CGO_ENABLED=0`) fail at compile time.
+MinGW-W64 **must** be in `PATH`.
+
+### Moulin requires Go 1.20 exactly for Windows 7 support
+If building for modern Windows only, any Go version works.
+Do not upgrade the root `go.mod` past `go 1.20` unless Win7 support is dropped.
+
+### `pdf/` is a git submodule (forked `ledongthuc/pdf`)
+After cloning:
+```powershell
+git submodule update --init --recursive
+```
+The fork patches are **local only** — the `go.mod` redirect `replace github.com/ledongthuc/pdf => ./pdf` makes this work.
+
+### JWT token lifetime
+Tokens expire. The orchestrator reads the token from the ingest payload — no
+automatic refresh. The browser extension or job submitter must supply a fresh token.
+
+### jobs.db WAL files
+SQLite runs in WAL mode — three companion files exist (`jobs.db`, `jobs.db-shm`,
+`jobs.db-wal`). **Never delete just `jobs.db`** — use the tray "Reset" button
+which calls `queue.Close()` first, or delete all three files together.
+
+### Port 8765 conflict
+If port 8765 is taken, the HTTP server silently fails. Check:
+```powershell
+netstat -ano | findstr 8765
+```
+
+### Windows 7 network drive UAC bug
+`unc_windows.go` resolves mapped drive letters (`M:\`) to UNC paths
+(`\\server\share\`) before any file operation — this bypasses the UAC elevation
+bug where mapped drives are invisible to elevated processes.
+
+### `App/` folder is not in git
+NAPS2 + Tesseract must be copied manually. See §11 above.
+
+---
+
+# 14. 🔁 Git Workflow
+
+```
+Branch: workspace-sync  (primary working branch)
+Remote: origin = https://github.com/maatallah/pdfxport
+Submodule: pdf/ → forked ledongthuc/pdf
+```
+
+### Daily workflow
+```powershell
+git pull origin workspace-sync       # always pull before starting work
+# ... edit ...
+git add <files>
+git commit -m "feat|fix|refactor(scope): description"
+git push
+```
+
+### After cloning (first time)
+```powershell
+git submodule update --init --recursive   # initialize pdf/ submodule
+```
+
+### What is **not** committed (`.gitignore`)
+```
+/in/  /out/  /App/  /dbg/  /BulkOrder/  /release/
+*.pdf  *.xlsx  *.tsv  *.exe  *.exe~  *.7z  *.txt
+jobs.db  jobs.db-shm  jobs.db-wal
+```
+
+---
+
+# 15. 🆕 New PC Setup (full procedure)
+
+```powershell
+# Step 1 — Clone
+git clone https://github.com/maatallah/pdfxport M:\dev\cpt\PDFXport
+cd M:\dev\cpt\PDFXport
+
+# Step 2 — Automated env check + tool install
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\setup_dev_env.ps1
+
+# Step 3 — Initialize submodule
+git submodule update --init --recursive
+
+# Step 4 — Build Moulin (no CGO needed)
+go build -o release\Moissonneuse-Moulin.exe .
+
+# Step 5 — Build Serveur (CGO required)
+cd pdfxport-orchestrator
+$env:CGO_ENABLED = "1"
+go build -o ..\release\Moissonneuse-Serveur.exe .\cmd\main.go
+cd ..
+
+# Step 6 — Copy App/ folder from another machine (NAPS2 + Tesseract)
+#   Source: any existing installation's App\ directory
+#   Destination: M:\dev\cpt\PDFXport\App\
+
+# Step 7 — Create working folders
+New-Item -ItemType Directory release\in, release\out -Force
+```
+
+Full automated steps 1–2: see `setup_dev_env.ps1`
+
+---
+
+# 16. 🧪 Testing
 
 ### Health check
 ```powershell
 Invoke-WebRequest http://localhost:8765/health
 ```
 
-### Submit a test job
+### Submit a test ingest job
 ```powershell
 $body = @{
     orderNum   = "TEST-001"
@@ -256,137 +599,74 @@ $body = @{
     lang       = "fr"
     token      = "YOUR_JWT_HERE"
 } | ConvertTo-Json
-
 Invoke-RestMethod -Uri http://localhost:8765/ingest -Method POST `
     -ContentType "application/json" -Body $body
 ```
 
 ### Check queue state
 ```powershell
-cd release   # or wherever jobs.db lives
-sqlite3 jobs.db "SELECT id, order_num, status, attempts FROM jobs ORDER BY id DESC LIMIT 20;"
+sqlite3 release\jobs.db "SELECT id,order_num,status,attempts FROM jobs ORDER BY id DESC LIMIT 20;"
 ```
 
-### Full smoke test
+### Diagnose a bad PDF
 ```powershell
-# 1. Start server
+.\ptxrid.exe -input ".\in\problem.pdf" -dump -debug
+# Check: .\in\problem_debug.txt  and  .\in\parsed.txt
+```
+
+### Smoke test — full pipeline
+```powershell
+# 1. Start Serveur
 Start-Process .\release\Moissonneuse-Serveur.exe
 
-# 2. Verify health
+# 2. Health check
 Invoke-WebRequest http://localhost:8765/health | Select-Object StatusCode
 
 # 3. Ingest test job (see above)
 
-# 4. Watch output folder
+# 4. Watch output
 Get-ChildItem .\release\output -Recurse | Sort-Object LastWriteTime -Descending | Select -First 5
+
+# 5. Run Moulin on harvested PDFs
+.\release\Moissonneuse-Moulin.exe -dir .\release\output -outdir .\release\out
 ```
 
 ---
 
-# 10. ⚠️ Known Constraints & Gotchas
+# 17. 📌 Current Status & Roadmap
 
-### CGO is non-negotiable
-`go-sqlite3` and `getlantern/systray` are CGO packages.
-Pure-Go builds (`CGO_ENABLED=0`) will fail at compile time.
-MinGW-W64 must be in `PATH`.
-
-### JWT token lifetime
-Tokens expire. The orchestrator reads the token from the ingest payload —
-no automatic refresh. The browser extension or job submitter must supply a
-fresh token.
-
-### jobs.db WAL mode
-SQLite runs in WAL mode (`jobs.db-wal`, `jobs.db-shm` companion files).
-Do NOT delete only `jobs.db` — delete all three, or use the tray "Reset" button
-which calls `queue.Close()` first.
-
-### Port 8765 conflict
-If another process holds port 8765, the server silently continues without
-the HTTP listener. Check with:
-```powershell
-netstat -ano | findstr 8765
-```
-
-### Submodule (pdf parser)
-The `pdf/` directory is a git submodule. After cloning:
-```powershell
-git submodule update --init --recursive
-```
-
----
-
-# 11. 🔁 Git Workflow
-
-```
-Branch: workspace-sync  (primary working branch)
-Remote: origin = https://github.com/maatallah/pdfxport
-```
-
-### Daily workflow
-```powershell
-git pull origin workspace-sync   # always pull before starting work
-# ... make changes ...
-git add <files>
-git commit -m "feat|fix|refactor(scope): description"
-git push
-```
-
-### What is ignored (`.gitignore`)
-```
-/in/ /out/ /App/ /dbg/ /BulkOrder/ /release/
-*.pdf *.xlsx *.tsv *.exe *.exe~ *.7z *.txt
-```
-
-> **Do NOT commit** `jobs.db`, `*.exe`, or the `release/` folder.
-
----
-
-# 12. 🆕 New PC Setup (summary)
-
-```powershell
-# 1. Open PowerShell as Administrator
-# 2. Clone repo
-git clone https://github.com/maatallah/pdfxport M:\dev\cpt\PDFXport
-cd M:\dev\cpt\PDFXport
-
-# 3. Run the automated setup script
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\setup_dev_env.ps1
-
-# 4. Initialize submodule
-git submodule update --init --recursive
-
-# 5. Build
-cd pdfxport-orchestrator
-$env:CGO_ENABLED = "1"
-go build -o ..\release\Moissonneuse-Serveur.exe ./cmd/main.go
-```
-
-Full script with step verification, tool installation, and readiness summary:
-→ `setup_dev_env.ps1`
-
----
-
-# 13. 📌 Current Status & Roadmap
-
-### ✅ Done (Phase 2 complete)
-- Headless Go orchestrator replaces browser-based capture
-- SQLite job queue with atomic fetch, done, failed states
-- Windows system tray UI with live status and reset capability
-- HTTP ingestion endpoint (port 8765)
-- File storage per order number
-- `.gitignore` excludes all build/runtime artifacts
+### ✅ Implemented
+- Headless Go orchestrator (Serveur) with SQLite queue and systray UI
+- Windows system tray: live status, reset queue, quit
+- HTTP ingestion endpoint compatible with Chrome extension AND direct API use
+- PDF parser (Moulin) with 4-pass extraction strategy
+- Multi-language dimension support (FR/NL/EN labels)
+- Paire rule (paired curtains → width ÷ 2, 2 records)
+- Gauge/Droite rule (one-sided blind → split by individual panel widths)
+- Tissu fallback (fabric orders → "Hauteur/Largeur de coupe")
+- Automatic OCR fallback via NAPS2 + Tesseract
+- Excel output with text formatting + timestamped archive copy
+- UNC path resolution for Windows 7 network drives
+- `update_codes.ps1` for cross-checking order completion
+- `.gitignore` covering all runtime/build artifacts
 
 ### 🔜 Next priorities
-- **Automatic token refresh** — detect 401 and prompt for new token
-- **Retry backoff** — exponential retry for `failed` jobs
-- **Scheduler / CSV batch ingestion** — load job lists from a CSV file without browser
-- **PDF parser integration** — pipe downloaded PDFs directly into Moulin parser
-- **Dashboard** — lightweight local web UI to monitor queue and results
+- **Automatic JWT refresh** — detect 401 and prompt or re-auth
+- **Retry with exponential backoff** — automatic re-queue for failed jobs
+- **CSV batch ingestion** — load job lists from CSV without browser
+- **Moulin → Serveur integration** — pipe downloaded PDFs directly into parsing
+- **Dashboard** — local web UI for queue monitoring and result inspection
 
 ---
 
-# 14. 🧭 Key Engineering Principle
+# 18. 🧭 Key Engineering Principles
 
-> The browser is no longer part of the pipeline.
-> The system is a deterministic backend engine driven by API calls and a persistent queue.
+> **Serveur** is a deterministic backend engine driven by API calls and a
+> persistent queue — no browser required.
+
+> **Moulin** is a defensive parser: every extraction has multiple fallback
+> passes (text → OCR → positional), and files that cannot be parsed are
+> quarantined to `en_instance/` rather than silently dropped.
+
+> **The two binaries are independent** — they share a folder convention
+> (`output/`) but have no compile-time dependency on each other.

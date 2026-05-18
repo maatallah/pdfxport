@@ -349,10 +349,32 @@ if ($statusLines) {
 Pop-Location
 
 # ─────────────────────────────────────────────
+#  STEP 8b — GIT SUBMODULE (pdf/)
+# ─────────────────────────────────────────────
+Write-Header "STEP 8b — Git Submodule (pdf/ — ledongthuc/pdf fork)"
+Write-Step "Checking pdf/ submodule..."
+
+$submoduleDir = Join-Path $ProjectPath "pdf"
+Push-Location $ProjectPath
+if (-not (Test-Path (Join-Path $submoduleDir ".git"))) {
+    Write-Host "  pdf/ submodule not initialized — running git submodule update..." -ForegroundColor DarkCyan
+    git submodule update --init --recursive 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Pass "git submodule" "pdf/ initialized (ledongthuc/pdf fork)"
+    } else {
+        Fail "git submodule" "Failed — run manually: git submodule update --init --recursive"
+    }
+} else {
+    Pass "git submodule pdf/" "Already initialized"
+}
+Pop-Location
+
+# ─────────────────────────────────────────────
 #  STEP 9 — GO MODULE DEPENDENCIES
 # ─────────────────────────────────────────────
 Write-Header "STEP 9 — Go Module Dependencies"
 Write-Step "Running go mod download in orchestrator..."
+
 
 if (Test-Path $ORCH_DIR) {
     Push-Location $ORCH_DIR
@@ -380,7 +402,9 @@ if (Test-Path $ORCH_DIR) {
 #  STEP 10 — BUILD VERIFICATION
 # ─────────────────────────────────────────────
 Write-Header "STEP 10 — Build Verification"
-Write-Step "Attempting test build of Moissonneuse-Serveur..."
+
+# 10a — Moissonneuse-Serveur (CGO required)
+Write-Step "Attempting test build of Moissonneuse-Serveur (CGO)..."
 
 if (Test-Path $ORCH_DIR) {
     Push-Location $ORCH_DIR
@@ -390,15 +414,47 @@ if (Test-Path $ORCH_DIR) {
     $env:CGO_ENABLED = "1"
     $buildOut = Join-Path $buildDir "Moissonneuse-Serveur.exe"
 
-    Write-Host "  Building... (CGO=1, this may take ~30s on first run)" -ForegroundColor DarkCyan
+    Write-Host "  Building Serveur... (CGO=1, may take ~30s on first run)" -ForegroundColor DarkCyan
     go build -v -o $buildOut ./cmd/main.go 2>&1
     if ($LASTEXITCODE -eq 0 -and (Test-Path $buildOut)) {
         $size = [math]::Round((Get-Item $buildOut).Length / 1MB, 2)
-        Pass "Build succeeded" "Output: build\Moissonneuse-Serveur.exe ($size MB)"
+        Pass "Serveur build" "build\Moissonneuse-Serveur.exe ($size MB)"
     } else {
-        Fail "Build failed" "Check errors above — common causes: missing gcc, CGO disabled"
+        Fail "Serveur build failed" "Check errors above — common causes: missing gcc, CGO disabled"
     }
     Pop-Location
+}
+
+# 10b — Moissonneuse-Moulin (pure Go, no CGO)
+Write-Step "Attempting test build of Moissonneuse-Moulin (pure Go)..."
+
+$moulinBuildDir = Join-Path $ProjectPath "build"
+if (-not (Test-Path $moulinBuildDir)) { New-Item -ItemType Directory $moulinBuildDir | Out-Null }
+$moulinOut = Join-Path $moulinBuildDir "Moissonneuse-Moulin.exe"
+
+push-location $ProjectPath
+$env:CGO_ENABLED = "0"
+Write-Host "  Building Moulin... (CGO=0, pure Go)" -ForegroundColor DarkCyan
+go build -o $moulinOut . 2>&1
+if ($LASTEXITCODE -eq 0 -and (Test-Path $moulinOut)) {
+    $size = [math]::Round((Get-Item $moulinOut).Length / 1MB, 2)
+    Pass "Moulin build" "build\Moissonneuse-Moulin.exe ($size MB)"
+} else {
+    Fail "Moulin build failed" "Check errors above"
+}
+$env:CGO_ENABLED = "1"   # restore
+Pop-Location
+
+# 10c — App/ OCR folder check
+Write-Step "Checking OCR engine (App/ folder)..."
+$appDir   = Join-Path $ProjectPath "App"
+$naps2Exe = Join-Path $appDir "NAPS2.Console.exe"
+if (Test-Path $naps2Exe) {
+    Pass "NAPS2.Console.exe" "Found in App\"
+} else {
+    Warn "NAPS2.Console.exe missing" "Copy App\ from an existing installation for OCR support"
+    Write-Host "    NAPS2 portable : https://www.naps2.com/download" -ForegroundColor Gray
+    Write-Host "    Tessdata (fra) : https://github.com/tesseract-ocr/tessdata" -ForegroundColor Gray
 }
 
 # ─────────────────────────────────────────────
