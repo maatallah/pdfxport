@@ -2,12 +2,12 @@
 # Compiles both Serveur (Orchestrator, CGO=1) and Moulin (Parser, CGO=0) into the 'release/' folder automatically.
 # Usage: .\compile.ps1
 
-$ProjectPath = Get-Item -LiteralPath . | Select-Object -ExpandProperty FullName
+$ProjectPath = Get-Item -Path . | Select-Object -ExpandProperty FullName
 $ReleaseDir  = Join-Path $ProjectPath "release"
 
 # Ensure release directory exists
 if (-not (Test-Path $ReleaseDir)) {
-    New-Item -ItemType Directory -LiteralPath $ReleaseDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
 }
 
 Write-Host "PDFXport Compilation in progress..." -ForegroundColor Cyan
