@@ -3,7 +3,7 @@
 **Local path:** `M:\dev\cpt\PDFXport`\
 **GitHub repo:** <https://github.com/maatallah/pdfxport>\
 **Active branch:** `workspace-sync`\
-**System type:** Two-binary pipeline — headless orchestrator + PDF parsing engine
+**System type:** Three-component pipeline — Chrome extension + Go orchestrator + PDF parser
 
 > **Quick start on a new PC:** run `.\setup_dev_env.ps1` from the project root.
 
@@ -11,15 +11,16 @@
 
 # 1. 🧠 System Overview
 
-PDFXport is a **two-binary pipeline** that:
+PDFXport is a **three-component pipeline** that:
 
-1. **Moissonneuse-Serveur** (the orchestrator) — calls the Sieval web API to
-   batch-download PDFs for every open production order, stores them locally.
-2. **Moissonneuse-Moulin** (the parser) — reads those PDFs, extracts structured
-   order data (dimensions, client, reference, piece type…), and writes an Excel
-   file ready for label printing.
-
-Both binaries are built from the same repository in separate Go modules.
+1. **Hassad** (Chrome extension, `hassad/`) — intercepts Sieval API responses
+   while the operator browses Decoloop, silently captures order IDs + polygon IDs
+   + JWT tokens, stages them in a local buffer, then submits jobs on demand.
+2. **Moissonneuse-Serveur** (Go orchestrator) — receives jobs from the extension
+   via HTTP, queues them in SQLite, calls the Sieval API to download each PDF.
+3. **Moissonneuse-Moulin** (Go parser) — reads the downloaded PDFs, extracts
+   structured order data (dimensions, client, reference, piece type…), and writes
+   an Excel file ready for label printing.
 
 ---
 
@@ -27,15 +28,18 @@ Both binaries are built from the same repository in separate Go modules.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  LAYER 1 — Capture (deprecated, kept in /trash)          │
-│  Chrome Extension (MV3)                                  │
-│  ├─ content_main.js   intercept XHR/fetch blobs          │
-│  ├─ inject_xhr.js     XHR hook                           │
-│  ├─ inject_fetch.js   fetch hook                         │
-│  ├─ inject_blob.js    blob hook                          │
-│  └─ background.js     Base64 → POST → Go server          │
+│  LAYER 1 — Capture  (hassad/ — ACTIVE extension v3.5)    │
+│  Chrome Extension "PDFXport Harvester" (MV3)             │
+│  ├─ inject_xhr.js     hooks XHR to capture JSON API resp │
+│  ├─ content_main.js   staging buffer + harvest trigger   │
+│  ├─ background.js     legacy: Base64→PDF→/upload         │
+│  ├─ popup.html/.js    operator UI (toggle, counter, btn) │
+│  └─ manifest.json     v3.5, host: decoloop.com + sieval  │
+│                                                          │
+│  ⚠ trash/extension/  = old blob-intercept approach       │
+│     (kept for reference, NOT loaded in Chrome)           │
 └──────────────────────────────────────────────────────────┘
-                         ↓ (legacy path, port 8765/upload)
+                         ↓ POST /add  (JSON job payload)
 ┌──────────────────────────────────────────────────────────┐
 │  LAYER 2 — Orchestrator  (Moissonneuse-Serveur.exe)      │
 │  Go module: pdfxport-orchestrator/                       │
@@ -135,17 +139,27 @@ PDFXport/
 │   ├── jobs.db / jobs.db-shm / -wal  live orchestrator queue
 │   └── output/                        downloaded PDFs
 │
+├── ── ACTIVE CHROME EXTENSION ─────────────────────────────
+│
+├── hassad/                            ★ ACTIVE extension — load THIS in Chrome
+│   ├── manifest.json                  MV3, v3.5 "PDFXport Harvester"
+│   ├── inject_xhr.js                  page-context XHR hook (JSON interceptor)
+│   ├── content_main.js                staging buffer + harvest trigger handler
+│   ├── background.js                  service worker (legacy /upload path)
+│   ├── popup.html                     operator UI (dark golden wheat theme)
+│   └── popup.js                       health check + buffer counter + harvest btn
+│
 ├── ── LEGACY / REFERENCE ──────────────────────────────────
 │
-├── trash/                             Archived Chrome extension (for reference)
-│   ├── extension/                     last working MV3 extension version
+├── trash/                             Old blob-intercept extension (DO NOT LOAD)
+│   ├── extension/                     last working blob-intercept MV3 version
 │   │   ├── manifest.json
 │   │   ├── content_main.js
 │   │   ├── background.js
 │   │   ├── inject_xhr.js
 │   │   ├── inject_fetch.js
 │   │   └── inject_blob.js
-│   └── BulkOrder/                     bulk-order variant of the extension
+│   └── BulkOrder/                     bulk-order variant of the old extension
 │
 ├── ── DOCUMENTATION ───────────────────────────────────────
 │
@@ -160,6 +174,16 @@ PDFXport/
 ---
 
 # 3. ⚙️ Technology Stack
+
+## Hassad — Chrome Extension
+
+| Component | Details |
+|-----------|---------|
+| Standard | Chrome Extension Manifest V3 |
+| Language | Vanilla JavaScript (ES2020) |
+| Storage | `chrome.storage.local` (staging buffer) |
+| Target host | `*.decoloop.com` + `sievalhub.sieval.com` |
+| Server endpoint | `http://localhost:8765/add` (job submission) |
 
 ## Moissonneuse-Serveur (orchestrator)
 
@@ -183,13 +207,136 @@ PDFXport/
 
 ---
 
+# 4. 🌾 Hassad — Chrome Extension (Active)
+
+**Folder:** `hassad/` — load this directory in Chrome as an unpacked extension.
+
+> **Critical distinction:** `hassad/` does NOT intercept PDF blobs.
+> It intercepts **JSON API responses** to silently harvest order metadata,
+> then sends structured job payloads to the orchestrator on demand.
+> The old blob approach (`trash/`) is no longer used.
+
+## How it works
+
+### Stage 1 — Passive interception (`inject_xhr.js`)
+
+Injected into the page context of `*.decoloop.com`. Hooks `XMLHttpRequest` to:
+- Capture the **Authorization header** (JWT Bearer token) from any outgoing request
+- Intercept responses from:
+  - `browse` endpoints → bulk list of `{projectNumber, id, polygons[]}`
+  - `getProjectDetailsById` → single project details
+- If polygon IDs are missing, performs a **background fetch** to
+  `getProjectDetailsById?productionProjectId=<id>` using the captured JWT
+- Emits `HARVESTED_ID` postMessage events to `content_main.js`
+
+```javascript
+// What is captured per order:
+{
+  orderNum:  "60FG.00063",   // e.g. projectNumber from browse response
+  projectId: 210576,          // item.id
+  polygons:  [573286, 573287],// polygon IDs
+  token:     "eyJ..."        // stripped Bearer JWT
+}
+```
+
+### Stage 2 — Staging buffer (`content_main.js`)
+
+- Listens for `HARVESTED_ID` messages
+- Stores entries keyed by `orderNum` in `chrome.storage.local` under `stagingBuffer`
+- Buffer persists across page navigations
+- Responds to `TRIGGER_HARVEST` messages from the popup
+
+### Stage 3 — Manual harvest trigger (`popup.js` + `content_main.js`)
+
+When the operator clicks **"Moissonner la Sélection"** in the popup:
+1. `content_main.js` reads checked rows in the Decoloop table
+   (`tbody tr[role="row"] mat-checkbox.mat-checkbox-checked`)
+2. For each selected `orderNum`, looks up its entry in the staging buffer
+3. POSTs to `http://localhost:8765/add`:
+
+```json
+{
+  "orderNum":   "60FG.00063",
+  "projectId":  210576,
+  "documentId": 38,
+  "polygons":   [573286, 573287],
+  "lang":       "fr",
+  "token":      "eyJ..."
+}
+```
+
+> **Note:** `documentId: 38` is currently hardcoded — this is the Sieval
+> document type ID for production order PDFs. Change if needed.
+
+### Stage 4 — Popup UI (`popup.html` / `popup.js`)
+
+| UI element | Function |
+|------------|----------|
+| Server status dot 🟡/🔴 | Polls `GET /health` every 3 seconds |
+| "Récolte Active" toggle | Enables/disables XHR interception |
+| Buffer counter | Shows `N commande(s) prête(s)` from `stagingBuffer` |
+| "Moissonner la Sélection" | Sends selected checked rows to orchestrator |
+| "Vider la Grange" | Clears `stagingBuffer` in `chrome.storage.local` |
+
+### What `background.js` does in `hassad/`
+
+`background.js` in `hassad/` handles the **legacy `UPLOAD_PDF` message** path —
+it decodes a Base64 PDF and POSTs it to `/upload`. This path is no longer
+the primary flow (superseded by the JSON interception approach) but is preserved
+for backward compatibility.
+
+## Installing the extension
+
+```
+1. Open Chrome → chrome://extensions
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked"
+4. Select: M:\dev\cpt\PDFXport\hassad\
+5. Extension appears as "PDFXport Harvester" v3.5
+6. Pin it to toolbar for easy access
+```
+
+## Debugging the extension
+
+```
+# Content script logs:
+Right-click page → Inspect → Console (filter: "Moissonneuse")
+
+# Background service worker logs:
+chrome://extensions → PDFXport Harvester → "Service Worker" link → Inspect
+
+# Check staging buffer:
+chrome://extensions → PDFXport Harvester → Service Worker → Console:
+chrome.storage.local.get(['stagingBuffer'], console.log)
+```
+
+## Extension file summary
+
+| File | Role |
+|------|------|
+| `manifest.json` | MV3, v3.5, declares host permissions and content script |
+| `inject_xhr.js` | Page-context XHR hook — harvests order JSON + JWT |
+| `content_main.js` | Injects hook, manages staging buffer, handles trigger |
+| `background.js` | Service worker — legacy PDF upload path |
+| `popup.html` | Dark golden-wheat themed operator dashboard |
+| `popup.js` | Health check, buffer counter, harvest/clear buttons |
+
+---
+
 # 4. 🔄 Data Flow (end to end)
 
 ```
-STEP 1 — Job ingestion
-  Browser extension (or future scheduler)
-    → POST /ingest  to Moissonneuse-Serveur
+STEP 0 — Passive capture (Hassad extension, automatic while browsing)
+  inject_xhr.js intercepts XHR responses on decoloop.com
+    → captures orderNum + projectId + polygons[] + JWT token
+    → stores in chrome.storage.local stagingBuffer
+
+STEP 1 — Job submission (operator clicks "Moissonner la Sélection")
+  content_main.js reads checked rows in Decoloop table
+    → for each selected order, looks up stagingBuffer
+    → POST /add  to Moissonneuse-Serveur (JSON payload)
     → job stored in jobs.db (status=pending)
+  [Alternative: POST /ingest for direct API or testing use]
 
 STEP 2 — PDF harvesting
   Moissonneuse-Serveur polling loop
