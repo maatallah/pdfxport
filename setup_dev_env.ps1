@@ -478,9 +478,9 @@ if (Test-Path $naps2Exe) {
 # ─────────────────────────────────────────────
 Write-Header "FINAL READINESS SUMMARY"
 
-$passes = $RESULTS | Where-Object { $_.Status -eq "PASS" }
-$warns  = $RESULTS | Where-Object { $_.Status -eq "WARN" }
-$fails  = $RESULTS | Where-Object { $_.Status -eq "FAIL" }
+$passes = @($RESULTS | Where-Object { $_.Status -eq "PASS" })
+$warns  = @($RESULTS | Where-Object { $_.Status -eq "WARN" })
+$fails  = @($RESULTS | Where-Object { $_.Status -eq "FAIL" })
 
 foreach ($r in $RESULTS) {
     $color = switch ($r.Status) {
