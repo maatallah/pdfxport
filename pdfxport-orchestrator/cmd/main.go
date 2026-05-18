@@ -13,12 +13,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"pdfxport-orchestrator/internal/client"
 	"pdfxport-orchestrator/internal/queue"
 	"pdfxport-orchestrator/internal/storage"
+	"pdfxport-orchestrator/internal/utils"
+
+	"github.com/getlantern/systray"
 )
 
 type Metrics struct {
@@ -30,16 +34,49 @@ type Metrics struct {
 }
 
 func main() {
-	metrics := &Metrics{}
+	systray.Run(onReady, onExit)
+}
 
+func onReady() {
+	systray.SetIcon(utils.IconData)
+	systray.SetTitle("PDFXport Moissonneuse")
+	systray.SetTooltip("Moissonneuse PDFXport - En attente...")
+	
+	// Create Menu Items
+	mStatus := systray.AddMenuItem("🌾 Statut: En écoute (Port 8765)", "Le serveur est actif")
+	mStatus.Disable()
+	
+	systray.AddSeparator()
+	
+	mReset := systray.AddMenuItem("🧹 Vider le Grenier (Réinitialiser)", "Supprimer jobs.db pour autoriser les ré-extractions")
+	mQuit := systray.AddMenuItem("🚪 Quitter", "Arrêter le serveur")
+
+	metrics := &Metrics{}
 	store := storage.New("./output")
 	q := queue.New("./jobs.db")
-	apiClient := client.New("https://sievalhub.sieval.com", "") 
+	apiClient := client.New("https://sievalhub.sieval.com", "")
 
 	log.Println("🌾 Moissonneuse PDFXport Prête. En attente du blé...")
 
+	// Listen for menu actions
 	go func() {
-		// Point de contrôle santé
+		for {
+			select {
+			case <-mReset.ClickedCh:
+				q.Close() // Close DB before deletion
+				os.Remove("./jobs.db")
+				log.Println("🧹 Grenier vidé (jobs.db supprimé).")
+				systray.SetTooltip("Grenier réinitialisé.")
+				// Re-open queue
+				q = queue.New("./jobs.db")
+			case <-mQuit.ClickedCh:
+				systray.Quit()
+			}
+		}
+	}()
+
+	// Start HTTP Server
+	go func() {
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.WriteHeader(http.StatusOK)
@@ -76,7 +113,6 @@ func main() {
 			metrics.mu.Lock()
 			if metrics.StartTime.IsZero() {
 				metrics.StartTime = time.Now()
-				log.Println("🚜 Démarrage de la moissonneuse...")
 			}
 			metrics.mu.Unlock()
 
@@ -86,45 +122,49 @@ func main() {
 		http.ListenAndServe(":8765", nil)
 	}()
 
-	for {
-		batch, err := q.FetchBatch(1)
-		if err != nil || len(batch) == 0 {
-			if !metrics.StartTime.IsZero() && metrics.TotalCount > 0 && time.Since(metrics.LastJobTime) > 10*time.Second {
-				metrics.mu.Lock()
-				duration := metrics.LastJobTime.Sub(metrics.StartTime)
-				fmt.Printf("\n--- 🏁 RÉSUMÉ DE LA MOISSON ---\n")
-				fmt.Printf("🌾 Épis récoltés:  %d\n", metrics.TotalCount)
-				fmt.Printf("📦 Poids du grain: %.2f MB\n", float64(metrics.TotalBytes)/(1024*1024))
-				fmt.Printf("⏱️ Durée totale:   %s\n", duration.Round(time.Second))
-				fmt.Printf("🚀 Rendement:      %.2f s/épi\n", duration.Seconds()/float64(metrics.TotalCount))
-				fmt.Printf("-------------------------------\n\n")
-				metrics.TotalCount = 0
-				metrics.TotalBytes = 0
-				metrics.StartTime = time.Time{}
-				metrics.mu.Unlock()
+	// Processing Loop
+	go func() {
+		for {
+			batch, err := q.FetchBatch(1)
+			if err != nil || len(batch) == 0 {
+				if !metrics.StartTime.IsZero() && metrics.TotalCount > 0 && time.Since(metrics.LastJobTime) > 10*time.Second {
+					metrics.mu.Lock()
+					duration := metrics.LastJobTime.Sub(metrics.StartTime)
+					log.Printf("🏁 RÉSUMÉ: %d épis récoltés en %v", metrics.TotalCount, duration.Round(time.Second))
+					metrics.TotalCount = 0
+					metrics.TotalBytes = 0
+					metrics.StartTime = time.Time{}
+					metrics.mu.Unlock()
+					systray.SetTooltip("Dernière moisson terminée.")
+				}
+				time.Sleep(1 * time.Second)
+				continue
 			}
-			time.Sleep(1 * time.Second)
-			continue
+
+			job := batch[0]
+			apiClient.SetToken(job.Token)
+
+			systray.SetTooltip(fmt.Sprintf("🚜 Récolte en cours : %s", job.OrderNum))
+			data, err := apiClient.GeneratePDF(job.ProjectID, job.DocumentID, job.Polygons, job.Lang)
+			if err != nil {
+				log.Printf("❌ Erreur Job %d: %v", job.ID, err)
+				q.MarkFailed(job.ID, err.Error())
+				continue
+			}
+
+			_, _ = store.Save(job.OrderNum, job.ID, data)
+			q.MarkDone(job.ID)
+
+			metrics.mu.Lock()
+			metrics.TotalCount++
+			metrics.TotalBytes += int64(len(data))
+			metrics.LastJobTime = time.Now()
+			metrics.mu.Unlock()
+			systray.SetTooltip(fmt.Sprintf("🌾 %d récoltés (Dernier: %s)", metrics.TotalCount, job.OrderNum))
 		}
+	}()
+}
 
-		job := batch[0]
-		apiClient.SetToken(job.Token)
-
-		data, err := apiClient.GeneratePDF(job.ProjectID, job.DocumentID, job.Polygons, job.Lang)
-		if err != nil {
-			log.Printf("❌ Grain gâté (Job %d): %v", job.ID, err)
-			q.MarkFailed(job.ID, err.Error())
-			continue
-		}
-
-		_, _ = store.Save(job.OrderNum, job.ID, data)
-		q.MarkDone(job.ID)
-
-		metrics.mu.Lock()
-		metrics.TotalCount++
-		metrics.TotalBytes += int64(len(data))
-		metrics.LastJobTime = time.Now()
-		fmt.Printf("[%d] 🌾 %-15s | %d KB (Mis au grenier)\n", metrics.TotalCount, job.OrderNum, len(data)/1024)
-		metrics.mu.Unlock()
-	}
+func onExit() {
+	// Cleanup if needed
 }

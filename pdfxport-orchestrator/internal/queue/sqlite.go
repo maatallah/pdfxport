@@ -132,3 +132,9 @@ func (q *Queue) MarkFailed(id int, errMsg string) {
         SET status='failed', attempts=attempts+1, last_error=? 
         WHERE id=?`, errMsg, id)
 }
+
+func (q *Queue) Close() {
+	if q.db != nil {
+		q.db.Close()
+	}
+}
