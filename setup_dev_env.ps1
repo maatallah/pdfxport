@@ -312,8 +312,8 @@ git fetch origin 2>&1 | Out-Null
 $currentBranch = git rev-parse --abbrev-ref HEAD 2>$null
 Pass "Current branch" $currentBranch
 
-# Check for uncommitted local changes
-$statusLines = git status --porcelain 2>$null
+# Check for uncommitted local changes (ignoring submodule patches)
+$statusLines = git status --porcelain --ignore-submodules 2>$null
 if ($statusLines) {
     Warn "Uncommitted local changes detected" "Review with 'git status' before pulling"
     Write-Host ""
