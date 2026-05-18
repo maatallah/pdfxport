@@ -349,25 +349,41 @@ if ($statusLines) {
 Pop-Location
 
 # ─────────────────────────────────────────────
-#  STEP 8b — GIT SUBMODULE (pdf/)
+#  STEP 8b — GIT SUBMODULE (pdf/) & CUSTOM PATCH
 # ─────────────────────────────────────────────
 Write-Header "STEP 8b — Git Submodule (pdf/ — ledongthuc/pdf fork)"
 Write-Step "Checking pdf/ submodule..."
 
 $submoduleDir = Join-Path $ProjectPath "pdf"
 Push-Location $ProjectPath
+
+# 1. Initialize submodule if missing
 if (-not (Test-Path (Join-Path $submoduleDir ".git"))) {
     Write-Host "  pdf/ submodule not initialized — running git submodule update..." -ForegroundColor DarkCyan
     git submodule update --init --recursive 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Pass "git submodule" "pdf/ initialized (ledongthuc/pdf fork)"
+        Pass "git submodule" "pdf/ initialized"
     } else {
         Fail "git submodule" "Failed — run manually: git submodule update --init --recursive"
     }
 } else {
     Pass "git submodule pdf/" "Already initialized"
 }
+
+# 2. Apply the custom PDF extraction patch automatically
+Write-Step "Applying custom PDF parsing patch (pdf_page.go.patched)..."
+$patchedSrc = Join-Path $ProjectPath "pdf_page.go.patched"
+$patchedDst = Join-Path $submoduleDir "page.go"
+
+if (Test-Path $patchedSrc) {
+    Copy-Item -Path $patchedSrc -Destination $patchedDst -Force
+    Pass "Submodule patch" "Successfully copied pdf_page.go.patched -> pdf/page.go"
+} else {
+    Fail "Submodule patch" "Missing pdf_page.go.patched in project root!"
+}
+
 Pop-Location
+
 
 # ─────────────────────────────────────────────
 #  STEP 9 — GO MODULE DEPENDENCIES
