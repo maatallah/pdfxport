@@ -133,6 +133,19 @@ func (q *Queue) MarkFailed(id int, errMsg string) {
         WHERE id=?`, errMsg, id)
 }
 
+func (q *Queue) GetProgress() (int, int, error) {
+	var done, total int
+	err := q.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE status='done'`).Scan(&done)
+	if err != nil {
+		return 0, 0, err
+	}
+	err = q.db.QueryRow(`SELECT COUNT(*) FROM jobs`).Scan(&total)
+	if err != nil {
+		return 0, 0, err
+	}
+	return done, total, nil
+}
+
 func (q *Queue) Close() {
 	if q.db != nil {
 		q.db.Close()

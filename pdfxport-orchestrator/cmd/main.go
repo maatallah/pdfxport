@@ -144,7 +144,13 @@ func onReady() {
 			job := batch[0]
 			apiClient.SetToken(job.Token)
 
-			systray.SetTooltip(fmt.Sprintf("🚜 Récolte en cours : %s", job.OrderNum))
+			doneCount, totalCount, errProgress := q.GetProgress()
+			if errProgress == nil {
+				systray.SetTooltip(fmt.Sprintf("🚜 Récolte en cours : %s\n(%d/%d Récoltés)", job.OrderNum, doneCount, totalCount))
+			} else {
+				systray.SetTooltip(fmt.Sprintf("🚜 Récolte en cours : %s", job.OrderNum))
+			}
+
 			data, err := apiClient.GeneratePDF(job.ProjectID, job.DocumentID, job.Polygons, job.Lang)
 			if err != nil {
 				log.Printf("❌ Erreur Job %d: %v", job.ID, err)
