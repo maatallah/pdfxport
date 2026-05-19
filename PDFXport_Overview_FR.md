@@ -22,25 +22,32 @@ Ce travail est :
 
 ## 🚜 2. Le Fonctionnement Actuel (La Solution Hybride)
 
-Actuellement, le projet s'articule autour de trois éléments simples qui communiquent ensemble :
+Actuellement, le projet s'articule autour de quatre éléments clés qui communiquent ensemble :
 
 ```mermaid
 graph TD
     A[1. Page Web Decoloop] -->|L'extension capte les données| B[2. Extension Chrome Hassad]
-    B -->|Envoi des commandes en arrière-plan| C[3. Serveur Local Moissonneuse]
-    C -->|Téléchargement à la chaîne| D[4. Dossier de Sortie PDF]
-    D -->|Script de tri automatique| E[5. Dossier Final d'Import]
+    B -->|Envoi des commandes| C[3. L'Orchestrateur Serveur]
+    C -->|Télécharge & stocke| D[4. Fichiers PDF Bruts]
+    D -->|Décode & extrait les données| E[5. Le Moulin de Traitement / Parser]
+    E -->|Génère des fiches de production| F[6. Fichiers Excel structurés pour étiqueteuses]
     
     style A fill:#f9f9f9,stroke:#333,stroke-width:1px
     style B fill:#d2f4ea,stroke:#0f5132,stroke-width:2px
     style C fill:#cff4fc,stroke:#055160,stroke-width:2px
     style D fill:#fff3cd,stroke:#664d03,stroke-width:1px
-    style E fill:#d1e7dd,stroke:#0f5132,stroke-width:2px
+    style E fill:#f8d7da,stroke:#842029,stroke-width:2.5px
+    style F fill:#d1e7dd,stroke:#0f5132,stroke-width:2px
 ```
 
-1. **L'Extension Web (Le Capteur) :** Intégrée à votre navigateur Chrome, elle détecte et mémorise les informations des projets affichés à l'écran. Un indicateur visuel (HUD) moderne s'affiche sur la page pour vous montrer la progression en temps réel (ex: `56 / 167 récoltés`).
-2. **Le Serveur Local (La Moissonneuse) :** Un mini-logiciel qui tourne silencieusement sur votre PC (représenté par un petit tracteur dans votre barre des tâches). Il reçoit les demandes de l'extension et télécharge les PDF à la chaîne.
-3. **Le Script de Tri :** Un utilitaire automatique déplace les PDF téléchargés directement vers le dossier d'importation de vos outils de production, prêt pour l'impression !
+1. **L'Extension Web Hassad (Le Capteur) :** Intégrée à votre navigateur Chrome, elle détecte et mémorise les informations des projets affichés à l'écran. Un indicateur visuel (HUD) moderne s'affiche sur la page pour vous montrer la progression en temps réel (ex: `56 / 167 récoltés`).
+2. **L'Orchestrateur (Moissonneuse-Serveur) :** Le mini-logiciel qui tourne silencieusement sur votre PC (représenté par le petit tracteur dans votre barre des tâches). Il reçoit les demandes de l'extension et télécharge les PDF à la chaîne.
+3. **Le Moulin de Traitement (Moissonneuse-Moulin / Parser) :** 
+   C'est le **cerveau intelligent** du système. Loin d'un simple copieur de fichiers, ce programme :
+   * **Décode le contenu des PDF :** Il ouvre et analyse le texte brut et la structure vectorielle interne de chaque PDF de production.
+   * **Extrait et trie les données :** Il identifie automatiquement les dimensions, métrages, coloris, sens de tissu et matières.
+   * **Sépare et valide :** Il découpe intelligemment les commandes complexes multi-produits, applique des filtres de validation industrielle stricts, et formate les données pour éliminer tout risque d'erreur d'impression.
+4. **Le Fichier de Sortie (Excel) :** Le Moulin génère des fichiers Excel standardisés, nettoyés et parfaitement structurés, prêts à être importés dans vos machines d'impression d'étiquettes de production !
 
 ---
 
@@ -55,12 +62,14 @@ Plus besoin d'ouvrir Chrome, d'activer une extension ou de faire tourner un serv
 graph LR
     A[1. Ouvrir Excel] --> B[2. Clic sur 'Actualiser la liste']
     B --> C[3. Sélectionner les commandes Y/N]
-    C --> D[4. Clic sur 'Télécharger les PDF']
+    C --> D[4. Lancer le Moulin de Traitement]
+    D --> E[5. Excel & Étiquettes prêts]
     
     style A fill:#f9f9f9,stroke:#333,stroke-width:1px
     style B fill:#cff4fc,stroke:#055160,stroke-width:1px
     style C fill:#fff3cd,stroke:#664d03,stroke-width:1px
-    style D fill:#d2f4ea,stroke:#0f5132,stroke-width:2px
+    style D fill:#f8d7da,stroke:#842029,stroke-width:2px
+    style E fill:#d2f4ea,stroke:#0f5132,stroke-width:2px
 ```
 
 ### 💡 Les avantages de la solution Excel :
@@ -74,6 +83,6 @@ graph LR
 
 ## 🏁 Conclusion
 
-La **solution hybride actuelle** est une réussite totale qui libère déjà vos équipes des tâches répétitives et sécurise la chaîne d'impression des étiquettes. 
+La **solution hybride actuelle** est une réussite totale qui libère déjà vos équipes des tâches répétitives et sécurise la chaîne d'impression des étiquettes grâce à la puissance d'analyse du **Moulin (Parser)**.
 
 L'**alternative Excel** représente la prochaine étape de maturité : transformer un système informatique multi-composants en un simple outil de bureau universel, accessible à tous, extrêmement robuste et simple à piloter.
