@@ -19,21 +19,28 @@
         }
     });
 
-    // 3. The Staging Engine (Mise en Grange) — race-free
+    // 3. The Staging Engine (Mise en Grange) — debounced and race-free
     let stagingBuffer = {};
     chrome.storage.local.get(['stagingBuffer'], (res) => {
         stagingBuffer = res.stagingBuffer || {};
     });
 
+    let saveTimeout = null;
     window.addEventListener("message", function (event) {
         if (event.source !== window) return;
         if (event.data.type === "HARVESTED_ID") {
             const { orderNum, projectId, polygons, token } = event.data;
 
             stagingBuffer[orderNum] = { projectId, polygons, token, timestamp: Date.now() };
-            chrome.storage.local.set({ stagingBuffer }, () => {
-                console.log(`🌾 Épi capturé: ${orderNum} (${polygons.length} polygones)`);
-            });
+            console.log(`🌾 Épi capturé: ${orderNum} (${polygons.length} polygones)`);
+
+            // Debounce the storage set by 100ms to avoid Chrome MAX_WRITE_OPERATIONS_PER_MINUTE rate limiting
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                chrome.storage.local.set({ stagingBuffer }, () => {
+                    console.log("💾 Grange synchronisée avec succès !");
+                });
+            }, 100);
         }
     });
 
@@ -67,38 +74,55 @@
         
         console.log(`🚜 Moisson lancée pour ${selectedOrders.length} épis...`);
         let sentCount = 0;
+        let failCount = 0;
 
-        selectedOrders.forEach(orderNum => {
+        // Process sequentially with a tiny delay to avoid browser socket exhaustion and SQLite database write locks
+        for (const orderNum of selectedOrders) {
             const data = bufferData[orderNum];
 
             if (data) {
-                fetch('http://localhost:8765/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        orderNum: orderNum,
-                        projectId: data.projectId,
-                        documentId: 38,
-                        polygons: data.polygons,
-                        lang: 'fr',
-                        token: data.token
-                    })
-                })
-                .then(() => {
-                    console.log(`✅ Mis en grange: ${orderNum}`);
-                })
-                .catch(err => console.error(`❌ Échec de la moisson pour ${orderNum}:`, err));
+                try {
+                    const response = await fetch('http://localhost:8765/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            orderNum: orderNum,
+                            projectId: data.projectId,
+                            documentId: 38,
+                            polygons: data.polygons,
+                            lang: 'fr',
+                            token: data.token
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        console.log(`✅ Mis en grange: ${orderNum}`);
+                        sentCount++;
+                    } else {
+                        console.error(`❌ Échec de la moisson pour ${orderNum}: Status ${response.status}`);
+                        failCount++;
+                    }
+                } catch (err) {
+                    console.error(`❌ Échec réseau pour ${orderNum}:`, err);
+                    failCount++;
+                }
                 
-                sentCount++;
+                // Sleep 5ms to give Go SQLite server breathing room
+                await new Promise(r => setTimeout(r, 5));
             } else {
                 console.warn(`⚠️ Épi manquant pour ${orderNum} (Pas encore capturé)`);
+                failCount++;
             }
-        });
+        }
 
         if (sentCount > 0) {
-            alert(`✅ ${sentCount} épi(s) envoyé(s) à la grange !`);
+            if (failCount > 0) {
+                alert(`✅ ${sentCount} épi(s) envoyé(s) à la grange.\n⚠️ ${failCount} épi(s) ont échoué ou étaient manquants !`);
+            } else {
+                alert(`✅ Tous les ${sentCount} épis ont été envoyés à la grange avec succès !`);
+            }
         } else {
-            alert("⚠️ Aucun épi prêt pour la moisson.");
+            alert("⚠️ Aucun épi n'a pu être envoyé à la grange.");
         }
     }
 })();

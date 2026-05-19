@@ -1,6 +1,6 @@
 param(
     [string]$CodesFile = "M:\dev\cpt\PDFXport\codes.txt",
-    [string]$PdfDir = "M:\dev\cpt\PDFXport\pdfxport-orchestrator\output",
+    [string]$PdfDir = "M:\dev\cpt\PDFXport\release\output",
     [string]$TargetDir = "M:\dev\cpt\PDFXport\in"
 )
 
@@ -26,7 +26,8 @@ for ($i = 1; $i -lt $lines.Count; $i++) {
         Move-Item -LiteralPath $src -Destination $dst -Force
         Write-Host "✅ Déplacé : $order.pdf"
         $moved++
-    } else {
+    }
+    else {
         Write-Host "⚠️ Introuvable : $order.pdf"
         $errors++
     }

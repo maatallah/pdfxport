@@ -1,6 +1,6 @@
 param(
     [string]$CodesFile = "M:\dev\cpt\PDFXport\codes.txt",
-    [string]$PdfDir = "M:\dev\cpt\PDFXport\pdfxport-orchestrator\output"
+    [string]$PdfDir = "M:\dev\cpt\PDFXport\release\output"
 )
 
 # Collect PDF base names (without extension) into a HashSet for fast lookup
