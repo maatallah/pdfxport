@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -993,10 +994,10 @@ func parseBlock(block string) []Record {
 
 	isPaire := false
 	if mLeft != nil && mRight != nil {
-		vL, _ := strconv.ParseFloat(strings.ReplaceAll(mLeft[1], ",", "."), 64)
-		vR, _ := strconv.ParseFloat(strings.ReplaceAll(mRight[1], ",", "."), 64)
-		// NEW RULE: Threshold of 20 to trigger a split
-		if vL > 20 && vR > 20 {
+		vL, errL := strconv.ParseFloat(strings.ReplaceAll(mLeft[1], ",", "."), 64)
+		vR, errR := strconv.ParseFloat(strings.ReplaceAll(mRight[1], ",", "."), 64)
+		// TARGET-002: Paire split triggers only when both values are strictly positive AND equal
+		if errL == nil && errR == nil && vL > 0 && vR > 0 && vL == vR {
 			isPaire = true
 		}
 	}
@@ -1182,6 +1183,25 @@ func exportCSV(r []Record, f string) {
 	}
 }
 
+func formatSizeForExcel(size string) string {
+	s := strings.TrimSpace(size)
+	if s == "" {
+		return ""
+	}
+	reSep := regexp.MustCompile(`(?i)\s+[xX]\s+`)
+	parts := reSep.Split(s, -1)
+	roundedParts := make([]string, len(parts))
+	for i, p := range parts {
+		p = strings.TrimSpace(p)
+		if v, err := strconv.ParseFloat(strings.ReplaceAll(p, ",", "."), 64); err == nil {
+			roundedParts[i] = strconv.FormatInt(int64(math.Ceil(v)), 10)
+		} else {
+			roundedParts[i] = p
+		}
+	}
+	return strings.Join(roundedParts, " x ")
+}
+
 func exportExcel(records []Record, outPath string) {
 	ex := excelize.NewFile()
 	s := "Orders"
@@ -1204,7 +1224,8 @@ func exportExcel(records []Record, outPath string) {
 
 	// Write Records
 	for i, rec := range records {
-		values := []string{rec.OrderNumber, rec.OrderItem, rec.ClientCode, rec.ClientName, rec.Reference, rec.Piece, rec.Size}
+		excelSize := formatSizeForExcel(rec.Size)
+		values := []string{rec.OrderNumber, rec.OrderItem, rec.ClientCode, rec.ClientName, rec.Reference, rec.Piece, excelSize}
 		for j, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(j+1, i+2)
 			ex.SetCellStr(s, cell, v)
