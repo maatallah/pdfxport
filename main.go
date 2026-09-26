@@ -840,7 +840,7 @@ func parseBlock(block string) []Record {
 	norm = strings.ReplaceAll(norm, "\r", "")
 	// Ensure common field labels appear on their own line when PDFs collapse
 	// spacing. Added Dutch labels and fuzzy support for OCR typos (Hauteu, etc.)
-	labelRe := regexp.MustCompile(`(?i)(Commande\s*[:\s\._]*|Nom\s*[:\s\._]*|Rue\s*[:\s\._]*|Code postal\s*[:\s\._]*|Domicilié à\s*[:\s\._]*|R[eé]f[eé]rence\s*[:\s\._]*|Pi[eéè]ce\s*[:\s\._]*|Stuk\s*[:\s\._]*|Détails tissu\s*[:\s\._]*|Détails\s*[:\s\._]*|Hauteu[r]?\s*[:\s\._]*|Hoogte\s*[:\s\._]*|Largeu[r]?\s*[:\s\._]*|Breedte\s*[:\s\._]*|À gauche|À droite|Gauge\s*[:\s\._]*|Droite\s*[:\s\._]*)`)
+	labelRe := regexp.MustCompile(`(?i)(Commande\s*[:\s\._]*|Nom\s*[:\s\._]*|Rue\s*[:\s\._]*|Code postal\s*[:\s\._]*|Domicilié à\s*[:\s\._]*|R[eé]f[eé]rence\s*[:\s\._]*|Pi[eéè]ce\s*[:\s\._]*|Stuk\s*[:\s\._]*|Détails tissu\s*[:\s\._]*|Détails\s*[:\s\._]*|Hauteu[r]?\s*[:\s\._]*|Hoogte\s*[:\s\._]*|Largeu[r]?\s*[:\s\._]*|Breedte\s*[:\s\._]*|À gauche|À droite|Gauge\s*[:\s\._]*|Droite\s*[:\s\._]*|[A-Z0-9]{4}\.[A-Z0-9]{5})`)
 	norm = labelRe.ReplaceAllString(norm, "\n$1")
 
 	rec := Record{}
