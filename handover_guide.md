@@ -128,8 +128,8 @@ PDFXport/
 ├── ptxrid.exe                         Compiled Moulin parser binary
 ├── ptxrid.bat                         Interactive launcher (prompts for in/out dirs)
 ├── start_server.bat                   Starts Moulin in -server mode (HTTP receiver)
-├── update_codes.ps1                   Cross-checks codes.txt against downloaded PDFs
-├── move_pdfs.ps1                      Helper to move PDFs between folders
+├── archive/update_codes.ps1          Archived helper (retired; codes.txt is direct server approval list)
+├── archive/move_pdfs.ps1              Archived helper (retired; server downloads directly to release\in)
 │
 ├── ── RELEASE BUILDS ──────────────────────────────────────
 │
@@ -607,15 +607,15 @@ scanned PDFs.
 |--------|---------|
 | `ptxrid.bat` | Interactive launcher — prompts for input/output dirs, runs Moulin |
 | `start_server.bat` | Starts Moulin in `-server` mode (for Chrome extension pipeline) |
-| `update_codes.ps1` | Compares `codes.txt` against downloaded PDFs in the output folder, marks which orders are present (`Y`/blank) |
-| `move_pdfs.ps1` | Helper to batch-move PDFs between working folders |
+| `archive/update_codes.ps1` | Archived helper (retired; codes.txt is direct server approval list) |
+| `archive/move_pdfs.ps1` | Archived helper (retired; direct server download to `release\in` eliminates manual staging) |
 
-### `update_codes.ps1` details
+### `update_codes.ps1` details (Archived)
 ```powershell
-# Cross-check codes.txt (tab-separated: Y/blank  TAB  OrderNum)
-# against all PDFs in the orchestrator output folder.
-.\update_codes.ps1 -CodesFile "M:\dev\cpt\PDFXport\codes.txt" `
-                   -PdfDir    "M:\dev\cpt\PDFXport\pdfxport-orchestrator\output"
+# Historical cross-check of codes.txt against staging PDFs.
+# Note: Retired; Server now performs authoritative pre-download filtering directly.
+.\archive\update_codes.ps1 -CodesFile "M:\dev\cpt\PDFXport\codes.txt" `
+                           -PdfDir    "M:\dev\cpt\PDFXport\release\output"
 ```
 
 ---
@@ -794,7 +794,7 @@ Get-ChildItem .\release\output -Recurse | Sort-Object LastWriteTime -Descending 
 - Automatic OCR fallback via NAPS2 + Tesseract
 - Excel output with text formatting + timestamped archive copy
 - UNC path resolution for Windows 7 network drives
-- `update_codes.ps1` for cross-checking order completion
+- `archive/update_codes.ps1` (archived; order completion & filtering now handled server-side)
 - `.gitignore` covering all runtime/build artifacts
 
 ### 🔜 Next priorities
